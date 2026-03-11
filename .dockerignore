@@ -1,0 +1,24 @@
+# Git and IDE
+.git
+.gitignore
+.idea
+.vscode
+*.swp
+
+# Local data and outputs (use volumes in Docker)
+data/
+output/
+*.pptx
+
+# Python
+__pycache__
+*.py[cod]
+.venv
+venv
+.env
+
+# Docs / dev (optional)
+*.md
+goals/
+.devcontainer
+.streamlit

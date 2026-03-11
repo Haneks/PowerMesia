@@ -1,0 +1,45 @@
+# Configuration - Générateur de PowerPoint Paroissial
+# Phase Link - Paramètres API, design, typographie
+
+# --- Format de présentation ---
+presentation:
+  aspect_ratio: "16:9"  # Widescreen (13.333" x 7.5")
+  # alternative: "4:3" (10" x 7.5")
+
+# --- API AELF ---
+aelf:
+  base_url: "https://api.aelf.org"
+  endpoints:
+    messes: "/v1/messes/{date}/{zone}"
+    informations: "/v1/informations/{date}/{zone}"
+  zone_default: "france"
+  timeout_seconds: 10
+
+# --- Design des slides (phase Context) ---
+design:
+  background:
+    type: "color"  # color | image
+    color: "#0a1628"  # Bleu nuit très sombre
+    # color_alt: "#000000"  # Noir (alternative)
+  text:
+    color: "#FFFFFF"
+    font: "Calibri"
+    size: 34
+    size_min: 24
+  title_rappel:
+    size: 20
+    color: "#CCCCCC"
+  alignment:
+    horizontal: "center"  # left | center | right
+    vertical: "center"    # top | center | bottom
+
+# --- Découpage intelligent (hardprompts) ---
+slicing:
+  max_words_per_slide: 50
+  separators_priority: [". ", "; ", ", ", " "]
+
+# --- Base de données chants ---
+db:
+  path: "data/chants.db"
+  # Alternative JSON :
+  # json_path: "data/chants.json"

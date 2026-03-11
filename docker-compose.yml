@@ -1,0 +1,15 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8501:8501"
+    environment:
+      - DATA_DIR=/data
+      - OUTPUT_DIR=/output
+    volumes:
+      - ./data:/data
+      - ./output:/output
+
+volumes:
+  pwpt-data:
+  pwpt-output:
