@@ -19,8 +19,12 @@ aelf:
 design:
   background:
     type: "color"  # color | image
-    color: "#0a1628"  # Bleu nuit très sombre
-    # color_alt: "#000000"  # Noir (alternative)
+    # Lectures et messages : bleu nuit
+    color: "#0a1628"
+    # Chants : vert très sombre (différencié)
+    color_chant: "#0d2818"
+    # Messages : optionnel, sinon même que lectures
+    # color_message: "#1a0a28"
   text:
     color: "#FFFFFF"
     font: "Calibri"
@@ -32,6 +36,16 @@ design:
   alignment:
     horizontal: "center"  # left | center | right
     vertical: "center"    # top | center | bottom
+  # Thème : fond foncé / texte clair OU fond clair / texte foncé
+  theme_colors:
+    dark:
+      background: { color: "#0a1628", color_chant: "#0d2818" }
+      text: "#FFFFFF"
+      title_rappel: "#CCCCCC"
+    light:
+      background: { color: "#f5f5f5", color_chant: "#e8f0e8" }
+      text: "#1a1a1a"
+      title_rappel: "#444444"
 
 # --- Découpage intelligent (hardprompts) ---
 slicing:

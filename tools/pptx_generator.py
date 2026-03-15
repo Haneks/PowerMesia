@@ -125,20 +125,47 @@ def _get_slide_dimensions(config: dict) -> tuple[float, float]:
     return 10.0, 7.5  # 4:3 par défaut
 
 
+def _get_theme_colors(config: dict, theme: str) -> tuple[str, str, str, str]:
+    """Retourne (bg_lecture, bg_chant, text_color, title_color) pour le thème."""
+    design = config.get("design", {})
+    theme_colors = design.get("theme_colors", {}).get(theme)
+    if theme_colors:
+        bg = theme_colors.get("background", {})
+        return (
+            bg.get("color", "#0a1628"),
+            bg.get("color_chant", "#0d2818"),
+            theme_colors.get("text", "#FFFFFF"),
+            theme_colors.get("title_rappel", "#CCCCCC"),
+        )
+    bg = design.get("background", {})
+    text_cfg = design.get("text", {})
+    title_cfg = design.get("title_rappel", {})
+    return (
+        bg.get("color", "#0a1628"),
+        bg.get("color_chant", "#0d2818"),
+        text_cfg.get("color", "#FFFFFF"),
+        title_cfg.get("color", "#CCCCCC"),
+    )
+
+
 def _add_slide(
     prs: Presentation,
     config: dict,
     title: str,
     body: str,
     is_continuation: bool = False,
+    slide_type: str = "lecture",
+    theme: str = "dark",
 ) -> None:
-    """Ajoute une slide 16:9 avec texte centré (horizontal et vertical)."""
+    """Ajoute une slide 16:9 avec texte centré. slide_type: 'lecture' | 'chant' | 'message'. theme: 'dark' | 'light'."""
     blank = prs.slide_layouts[6]
     slide = prs.slides.add_slide(blank)
 
-    # Fond
-    bg = config.get("design", {}).get("background", {})
-    bg_color = bg.get("color", "#0a1628")
+    bg_lecture, bg_chant, font_color_hex, title_color_hex = _get_theme_colors(config, theme)
+    if slide_type == "chant":
+        bg_color = bg_chant
+    else:
+        bg_color = bg_lecture
     r = int(bg_color[1:3], 16)
     g = int(bg_color[3:5], 16)
     b = int(bg_color[5:7], 16)
@@ -147,21 +174,19 @@ def _add_slide(
     fill.solid()
     fill.fore_color.rgb = RGBColor(r, g, b)
 
-    # Style texte
+    # Style texte (couleurs selon le thème)
     text_cfg = config.get("design", {}).get("text", {})
     font_name = text_cfg.get("font", "Calibri")
     font_size = text_cfg.get("size", 34)
-    font_color = text_cfg.get("color", "#FFFFFF")
-    tr = int(font_color[1:3], 16)
-    tg = int(font_color[3:5], 16)
-    tb = int(font_color[5:7], 16)
+    tr = int(font_color_hex[1:3], 16)
+    tg = int(font_color_hex[3:5], 16)
+    tb = int(font_color_hex[5:7], 16)
 
     title_cfg = config.get("design", {}).get("title_rappel", {})
     title_size = title_cfg.get("size", 20)
-    title_color = title_cfg.get("color", "#CCCCCC")
-    tr2 = int(title_color[1:3], 16)
-    tg2 = int(title_color[3:5], 16)
-    tb2 = int(title_color[5:7], 16)
+    tr2 = int(title_color_hex[1:3], 16)
+    tg2 = int(title_color_hex[3:5], 16)
+    tb2 = int(title_color_hex[5:7], 16)
 
     width_in, height_in = _get_slide_dimensions(config)
     margin = 0.6
@@ -202,10 +227,11 @@ def generate_pptx(
     blocs: list[dict],
     output_path: Path,
     config_path: Optional[Path] = None,
+    theme: str = "dark",
 ) -> Path:
     """
     Génère un fichier PowerPoint à partir d'une liste de blocs.
-    Format 16:9, texte centré, max 50 mots par slide.
+    theme: 'dark' (fond foncé, texte clair) ou 'light' (fond clair, texte foncé).
     """
     cfg_path = config_path or CONFIG_PATH
     config = _load_config(cfg_path)
@@ -251,11 +277,11 @@ def generate_pptx(
         for i, chunk in enumerate(chunks):
             titre_slide = f"{label} (suite)" if i > 0 else label
             if t == "lecture":
-                _add_slide(prs, config, titre_slide, chunk, is_continuation=(i > 0))
+                _add_slide(prs, config, titre_slide, chunk, is_continuation=(i > 0), slide_type="lecture", theme=theme)
             elif t == "chant":
-                _add_slide(prs, config, titre_slide, chunk, is_continuation=(i > 0))
+                _add_slide(prs, config, titre_slide, chunk, is_continuation=(i > 0), slide_type="chant", theme=theme)
             else:
-                _add_slide(prs, config, titre_slide, chunk, is_continuation=(i > 0))
+                _add_slide(prs, config, titre_slide, chunk, is_continuation=(i > 0), slide_type="message", theme=theme)
 
     print(f"[pptx] Total : {total_slides} slide(s)", flush=True)
 

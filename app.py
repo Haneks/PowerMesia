@@ -61,6 +61,14 @@ if menu == "📅 Générer une messe":
     date_messe = st.sidebar.date_input("Date de la messe")
     date_str = date_messe.strftime("%Y-%m-%d")
 
+    theme = st.sidebar.radio(
+        "Thème visuel",
+        ["Fond foncé – texte clair", "Fond clair – texte foncé"],
+        index=0,
+        help="Couleur de fond et du texte des slides.",
+    )
+    theme_key = "dark" if theme.startswith("Fond foncé") else "light"
+
     if st.sidebar.button("Récupérer les lectures"):
         with st.spinner("Appel API AELF..."):
             data = get_messe(date_str)
@@ -140,17 +148,24 @@ if menu == "📅 Générer une messe":
             st.subheader("Ajouter un chant")
             chants = search_chants()
             if chants:
-                for c in chants:
-                    if st.button(f"➕ {c.titre}", key=f"add_{c.id}"):
-                        blocs.append({
-                            "ordre": len(blocs),
-                            "type": "chant",
-                            "chant_id": c.id,
-                            "titre": c.titre,
-                            "paroles": c.paroles,
-                        })
-                        st.session_state["blocs"] = blocs
-                        st.rerun()
+                options = ["— Choisir un chant —"] + [f"{c.titre}" + (f" ({c.reference})" if c.reference else "") for c in chants]
+                idx = st.selectbox(
+                    "Chant à ajouter",
+                    range(len(options)),
+                    format_func=lambda i: options[i],
+                    key="chant_select",
+                )
+                if st.button("➕ Ajouter ce chant", key="add_chant") and idx and idx > 0:
+                    c = chants[idx - 1]
+                    blocs.append({
+                        "ordre": len(blocs),
+                        "type": "chant",
+                        "chant_id": c.id,
+                        "titre": c.titre,
+                        "paroles": c.paroles,
+                    })
+                    st.session_state["blocs"] = blocs
+                    st.rerun()
             else:
                 st.caption("Aucun chant. Ajoutez-en dans la Bibliothèque.")
 
@@ -176,7 +191,7 @@ if menu == "📅 Générer une messe":
                                 "intro_lue": b.get("intro_lue", ""),
                                 "contenu": b.get("contenu", ""),
                             })
-                    generate_pptx(pptx_blocs, out)
+                    generate_pptx(pptx_blocs, out, theme=theme_key)
                     with open(out, "rb") as f:
                         st.session_state["pptx_bytes"] = f.read()
                     st.session_state["pptx_filename"] = out.name
