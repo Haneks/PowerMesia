@@ -410,3 +410,63 @@ def test_psaume_avec_recueil_reel_garde_son_numero_dans_le_titre():
     lignes = [L("Psaume 22   Recueil Aurore 2", gras=True, souligne=True), L("Le Seigneur est mon berger", gras=True)]
     [chant] = parse_lines(lignes, "x.docx").chants
     assert (chant.recueil, chant.titre) == ("Recueil Aurore 2", "Psaume 22 – Recueil Aurore 2")
+
+
+# --- I3. L'apostrophe typographique vaut l'apostrophe droite ---
+
+@pytest.mark.parametrize("apostrophe", ["'", "’", "‘", "ʼ"], ids=["droite", "courbe_fermante", "courbe_ouvrante", "modificatrice"])
+@pytest.mark.parametrize("en_tete, moment", [("Chant d{}entrée", M.ENTREE), ("Chant d{}envoi", M.ENVOI)],
+                         ids=["entree", "envoi"])
+def test_apostrophe_typographique_dans_un_en_tete_de_moment(en_tete, moment, apostrophe):
+    [chant] = parse_lines([L(en_tete.format(apostrophe), gras=True, souligne=True),
+                           L("Chantons au bord de l'eau", gras=True)], "x.docx").chants
+    assert chant.moment is moment
+    assert chant.titre == "Chantons au bord de l'eau"
+
+
+def test_apostrophe_courbe_dans_le_complement_de_l_intitule():
+    [chant] = parse_lines([L("Agneau d’Alliance", gras=True, souligne=True), L("Un vers inventé", gras=True)],
+                          "x.docx").chants
+    assert (chant.moment, chant.recueil, chant.titre) == (M.AGNEAU, None, "Agneau d’Alliance")
+
+
+# --- I4. Un refrain étiqueté puis répété sans étiquette reste ce refrain ---
+
+def test_refrain_etiquete_puis_repete_sans_etiquette_n_est_pas_un_couplet():
+    chant = chant_de(
+        L("Refrain :"), L("Chantons au bord de l'eau"),
+        L("1. Premier couplet inventé", vide=True),
+        L("Chantons au bord de l'eau", vide=True),
+        L("2. Second couplet inventé", vide=True),
+    )
+    assert ids(chant) == ["R", "1", "2"]
+    assert [s.type for s in chant.structure] == [TypeSection.REFRAIN, TypeSection.COUPLET, TypeSection.COUPLET]
+    assert chant.ordre == ["R", "1", "R", "2"]
+
+
+def test_refrain_detecte_en_gras_puis_repete_sans_gras_reste_ce_refrain():
+    chant = chant_de(
+        L("Chantons au bord de l'eau", gras=True),
+        L("1. Premier couplet inventé", vide=True),
+        L("Chantons au bord de l'eau", vide=True),
+        L("2. Second couplet inventé", vide=True),
+    )
+    assert ids(chant) == ["R", "1", "2"]
+    assert chant.ordre == ["R", "1", "R", "2"]
+
+
+# --- I5. « Voir » en début de vers n'est pas un renvoi ---
+
+def test_un_vers_qui_commence_par_voir_est_conserve():
+    chant = chant_de(L("Voir ta lumière briller sur nous"), L("Voir le monde en paix", vide=True))
+    assert toutes_les_lignes(chant) == ["Voir ta lumière briller sur nous", "Voir le monde en paix"]
+    assert chant.notes == []
+
+
+@pytest.mark.parametrize("renvoi", ["VOIR CHANT D'ENTREE", "VOIR LA SUITE", "Voir chant d'entrée", "voir le psaume 22",
+                                    "Voir le chant de communion"],
+                         ids=["majuscules", "majuscules_sans_chant", "casse_mixte", "psaume", "le_chant"])
+def test_un_renvoi_reste_ecarte_avec_une_note(renvoi):
+    chant = chant_de(L("Un vers inventé"), L(renvoi))
+    assert toutes_les_lignes(chant) == ["Un vers inventé"]
+    assert chant.notes == [f"Renvoi ignoré : {renvoi}"]

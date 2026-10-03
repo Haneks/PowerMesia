@@ -44,7 +44,8 @@ _DATE = re.compile(
     r"\b(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)\b"
     r"|\b\d{1,2}(er)?\s+(janvier|fevrier|mars|avril|mai|juin|juillet|aout|septembre|octobre|novembre|decembre)\b"
 )
-_RENVOI = re.compile(r"^\s*voir\b", re.IGNORECASE)
+# Renvoi : « VOIR CHANT D'ENTREE » (ligne en majuscules) ou « voir le chant / le psaume … » ; « Voir ta lumière… » est un vers.
+_RENVOI = re.compile(r"^\s*voir\s+(?:le\s+)?(?:chant|psaume)\b", re.IGNORECASE)
 _REPRISE = r"(?:\d\s*x|x\s*\d|bis)"
 _BIS = re.compile(rf"\s*\(?\b{_REPRISE}\b\)?\s*$", re.IGNORECASE)
 _PREFIXE_CHANT = re.compile(r"chant\s+(?:de\s+la\s+|de\s+l'|de\s+|du\s+|d'|a\s+la\s+|a\s+)?")
@@ -60,9 +61,17 @@ _MOTS_TITRE_MAJUSCULES = 8
 
 # --- Utilitaires de texte ---
 
+def _est_un_renvoi(texte: str) -> bool:
+    texte = texte.strip()
+    return bool(_RENVOI.match(texte)) or (texte.isupper() and re.match(r"VOIR\b", texte) is not None)
+
+
+_APOSTROPHES = "’‘ʼ"  # apostrophes typographiques, lues comme l'apostrophe droite
+
+
 def _sans_accents(texte: str) -> str:
-    """Minuscules sans accents, de même longueur que le texte d'origine."""
-    return "".join(unicodedata.normalize("NFD", c)[0] for c in texte).lower()
+    """Minuscules sans accents, apostrophes droites ; de même longueur que le texte d'origine."""
+    return "".join("'" if c in _APOSTROPHES else unicodedata.normalize("NFD", c)[0] for c in texte).lower()
 
 
 def _moment_en_tete(texte: str) -> tuple[Optional[M], str]:
@@ -145,7 +154,7 @@ def _chercher_entetes(lignes: list[Line]) -> list[_Entete]:
             and (i == 0 or ligne.vide_avant) and suivante_vide
             and not _PONCTUATION_FINALE.search(brut) and len(brut.split()) <= _MOTS_ENTETE_MAX
         )
-        if (souligne_gras or gras_seul) and not _RENVOI.match(brut) and not _est_etiquette(brut):
+        if (souligne_gras or gras_seul) and not _est_un_renvoi(brut) and not _est_etiquette(brut):
             entetes.append(_Entete(i, i + 1, brut))
         i += 1
     return entetes
@@ -236,7 +245,7 @@ def _normaliser(lignes: list[Line]) -> tuple[list[Line], list[str]]:
         texte = clean_spaces(ligne.texte)
         if not texte:
             continue
-        if _RENVOI.match(texte):
+        if _est_un_renvoi(texte):
             notes.append(f"Renvoi ignoré : {texte}")
             continue
         if texte.startswith("[") and texte.endswith("]"):  # « [Procession des enfants] »
@@ -320,7 +329,13 @@ def _types_des_blocs(blocs: list[_Bloc]) -> tuple[list[TypeSection], list[str]]:
             comptes[_cle(b)] = comptes.get(_cle(b), 0) + 1
         refrains = {id(b) for b in libres if comptes[_cle(b)] >= 2}
 
-    types = [b.etiquette or (TypeSection.REFRAIN if id(b) in refrains else TypeSection.COUPLET) for b in blocs]
+    # Un bloc au texte d'un refrain (étiqueté ou détecté) est une répétition de ce refrain, étiqueté ou non
+    cles_refrain = {_cle(b) for b in blocs if b.etiquette is TypeSection.REFRAIN or id(b) in refrains}
+    types = [
+        TypeSection.REFRAIN if (b.etiquette is TypeSection.REFRAIN or id(b) in refrains or _cle(b) in cles_refrain)
+        else b.etiquette or TypeSection.COUPLET
+        for b in blocs
+    ]
     return types, avertissements
 
 
