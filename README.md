@@ -5,7 +5,8 @@ Application web (Streamlit) pour générer des présentations PowerPoint de mess
 ## Fonctionnalités
 
 - **Récupération des lectures** : connexion à l’API AELF pour une date donnée (1ère lecture, psaume, 2e lecture, évangile).
-- **Bibliothèque de chants** : base SQLite pour gérer titres, paroles, références, recueil, moments liturgiques et structure (refrain, couplets, pont). La structure est renseignée par l’import de chants (bientôt disponible) ; le refrain est alors écrit en gras dans le PowerPoint et, lorsque le chant n’a qu’un seul refrain, répété après chaque couplet.
+- **Bibliothèque de chants** : base SQLite pour gérer titres, paroles, références, recueil, moments liturgiques et structure (refrain, couplets, pont). La structure est renseignée par la page **📥 Importer des chants** ; le refrain est alors écrit en gras dans le PowerPoint et, lorsque le chant n’a qu’un seul refrain, répété après chaque couplet.
+- **Import de chants (Word / PDF)** : déposez une feuille de messe ou un chant (`.docx`, ou `.pdf` exporté depuis Word, 10 Mo au plus). Les chants sont reconnus et séparés, les refrains détectés (en gras ou en italique, ou répétés), puis vérifiés à l'écran : titre, moments, recueil, type et texte des sections, ordre chanté, doublons de la bibliothèque (ignorer, remplacer ou ajouter). Les paroles ne sont jamais corrigées. Les partitions et les PDF-images sont refusés avec une raison.
 - **Ordre personnalisable** : réorganisation des blocs (monter/descendre) avant génération.
 - **Export PPTX** : PowerPoint 16:9, texte Calibri 54 noir sur fond clair, 150 caractères maximum par slide, titre paginé `[Titre] - x/y` (voir `hardprompts/slicing_rules.md`).
 
@@ -58,6 +59,13 @@ Pour utiliser des volumes nommés au lieu de dossiers locaux, adapter la section
 |-----------|--------------------------|-----------------------|
 | `DATA_DIR`   | Répertoire de la base chants | `./data`              |
 | `OUTPUT_DIR` | Répertoire des PPTX générés  | `./output`            |
+
+## Mise à jour
+
+- **Sauvegardez `data/chants.db`** (ou le volume `/data` de Docker) avant de déployer une nouvelle version : la base est migrée automatiquement au démarrage, sans perte, mais une copie évite tout regret.
+- Les coupures de diapositives des chants sans structure ont été ajustées (la coupure entre couplets est préférée) : sur le corpus de la paroisse, quelques chants gagnent ou perdent une diapositive.
+- Les dépendances `python-docx`, `PyMuPDF` et `lxml` sont installées par l'image (`pip install -r requirements.txt`) ; aucune bibliothèque système n'est requise.
+- PyMuPDF est sous licence AGPL (ou licence commerciale) : sans conséquence pour une instance paroissiale ; à revoir si l'image est publiée ou l'application donnée à une autre paroisse.
 
 ## Structure du projet
 

@@ -158,7 +158,7 @@ def test_structured_chant_repeats_bold_refrain_after_each_couplet(tmp_path):
 
 def test_structured_chant_follows_explicit_order(tmp_path):
     out = tmp_path / "c.pptx"
-    bloc = {"type": "chant", "titre": "Fleuve", "paroles": "", "structure": SECTIONS, "ordre": ["1", "R"]}
+    bloc = {"type": "chant", "titre": "Fleuve", "paroles": "", "structure": SECTIONS, "ordre_chant": ["1", "R"]}
     generate_pptx([bloc], out)
     assert _body_lines(out) == _expected(["1", "R"])
 
@@ -175,4 +175,19 @@ def test_structured_chant_title_is_paginated(tmp_path):
 def test_chant_without_structure_is_unchanged_and_not_bold(tmp_path):
     out = tmp_path / "c.pptx"
     generate_pptx([{"type": "chant", "titre": "Simple", "paroles": "Premier vers\nSecond vers"}], out)
+    assert _body_lines(out) == [("Premier vers", False), ("Second vers", False)]
+
+
+def test_ordre_qui_ne_designe_aucune_section_retombe_sur_l_ordre_calcule(tmp_path):
+    out = tmp_path / "c.pptx"
+    bloc = {"type": "chant", "titre": "Fleuve", "paroles": "inutile", "structure": SECTIONS, "ordre_chant": ["X", "Y"]}
+    generate_pptx([bloc], out)
+    assert _body_lines(out) == _expected(["R", "1", "R", "2", "R"])
+
+
+def test_structure_sans_aucune_ligne_retombe_sur_les_paroles(tmp_path):
+    out = tmp_path / "c.pptx"
+    structure = [{"id": "1", "type": "couplet", "lignes": []}]
+    bloc = {"type": "chant", "titre": "Vide", "paroles": "Premier vers\nSecond vers", "structure": structure, "ordre_chant": ["1"]}
+    generate_pptx([bloc], out)
     assert _body_lines(out) == [("Premier vers", False), ("Second vers", False)]

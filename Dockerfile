@@ -23,6 +23,8 @@ RUN mkdir -p /data /output
 # Streamlit: bind to 0.0.0.0 so container is reachable from host
 ENV STREAMLIT_SERVER_ADDRESS=0.0.0.0
 ENV STREAMLIT_SERVER_HEADLESS=true
+# Dépôt de fichiers (import de chants) : 10 Mo au plus, comme analyser_fichier
+ENV STREAMLIT_SERVER_MAX_UPLOAD_SIZE=10
 
 EXPOSE 8501
 
