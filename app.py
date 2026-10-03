@@ -179,7 +179,7 @@ if menu == "📅 Générer une messe":
                                 "titre": b.get("titre", ""),
                                 "paroles": b.get("paroles", ""),
                                 "structure": b.get("structure", []),
-                                "ordre": b.get("ordre_chant", []),
+                                "ordre_chant": b.get("ordre_chant", []),
                             })
                         elif b.get("type") == "lecture" and "contenu" in b:
                             pptx_blocs.append({
@@ -226,6 +226,10 @@ else:
         for c in st.session_state.get("search_results", search_chants()):
             with st.expander(c.titre):
                 st.write("Réf:", c.reference or "-")
+                if c.recueil:
+                    st.write("Recueil:", c.recueil)
+                if c.structure:
+                    st.caption("Structure : " + " · ".join(c.ordre or [s.id for s in c.structure]) + " (refrain en gras)")
                 st.write("Paroles (extrait):", (c.paroles or "")[:300] + "…" if len(c.paroles or "") > 300 else (c.paroles or ""))
 
     with tab2:
@@ -270,6 +274,8 @@ else:
                 if chant:
                     with st.form("edit_chant"):
                         titre = st.text_input("Titre", value=chant.titre)
+                        if chant.structure:
+                            st.caption("⚠️ Modifier les paroles supprime la structure (refrain en gras, ordre chanté).")
                         paroles = st.text_area("Paroles", value=chant.paroles)
                         auteur = st.text_input("Auteur", value=chant.auteur or "")
                         moments = st.multiselect(

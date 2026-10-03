@@ -126,10 +126,14 @@ def _chant_pages(bloc: dict, split_kwargs: dict) -> list:
     comme avant.
     """
     sections = sections_from_dicts(bloc.get("structure") or [])
-    if not sections:
+    # Ordre mémorisé, puis ordre calculé s'il ne désigne aucune section existante ; en dernier recours,
+    # les paroles à plat : un chant ne doit jamais sortir vide à cause d'une structure incohérente.
+    lines = expand_lines(sections, bloc.get("ordre_chant") or compute_ordre(sections)) if sections else []
+    if sections and not lines:
+        lines = expand_lines(sections, compute_ordre(sections))
+    if not lines:
         return split_text_for_slides(bloc.get("paroles", ""), mode="chant", **split_kwargs)
-    ordre = bloc.get("ordre") or compute_ordre(sections)
-    return split_lines_for_slides(expand_lines(sections, ordre), **split_kwargs)
+    return split_lines_for_slides(lines, **split_kwargs)
 
 
 def generate_pptx(
