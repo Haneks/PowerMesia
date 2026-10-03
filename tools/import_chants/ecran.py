@@ -36,14 +36,33 @@ RECAP = "import_recap"
 COMPTEUR_DEPOT = "import_depot_n"  # change la clé du dépôt pour le vider après un import
 
 
-def _analyser(fichiers) -> list[dict]:
+def _cle_fichier(f) -> str:
+    """Identité d'un fichier déposé : son identifiant de dépôt, à défaut son nom et sa taille."""
+    return getattr(f, "file_id", None) or f"{f.name}-{f.size}"
+
+
+def _analyser(f, cle: str) -> dict:
+    try:
+        analyse = analyser_fichier(f.name, f.getvalue())
+        return {"cle": cle, "nom": f.name, "chants": analyse.chants, "notes": analyse.notes, "refus": None}
+    except UnsupportedFile as e:
+        return {"cle": cle, "nom": f.name, "chants": [], "notes": [], "refus": e.raison}
+
+
+def _analyses_a_jour(fichiers, anciennes: list[dict]) -> list[dict]:
+    """
+    Une analyse par fichier déposé, dans l'ordre du dépôt. Un fichier déjà analysé (même clé) garde son
+    analyse, sans être relu : ajouter ou retirer un fichier ne touche pas aux cartes des autres.
+    Deux fichiers de même clé (même nom et même taille) reçoivent un suffixe de rang : -2, -3.
+    """
+    connues = {a["cle"]: a for a in anciennes if "cle" in a}
+    vues: dict[str, int] = {}
     resultats = []
     for f in fichiers:
-        try:
-            analyse = analyser_fichier(f.name, f.getvalue())
-            resultats.append({"nom": f.name, "chants": analyse.chants, "notes": analyse.notes, "refus": None})
-        except UnsupportedFile as e:
-            resultats.append({"nom": f.name, "chants": [], "notes": [], "refus": e.raison})
+        base = _cle_fichier(f)
+        vues[base] = vues.get(base, 0) + 1
+        cle = base if vues[base] == 1 else f"{base}-{vues[base]}"
+        resultats.append(connues[cle] if cle in connues else _analyser(f, cle))
     return resultats
 
 
@@ -138,7 +157,8 @@ def afficher_import() -> None:
     st.subheader("Importer des chants depuis Word ou PDF")
     st.caption(
         "Déposez une feuille de messe ou un chant (.docx, ou .pdf exporté depuis Word, 10 Mo au plus). "
-        "Les chants sont reconnus, puis vérifiés avant d'entrer dans la bibliothèque."
+        "Les chants sont reconnus, puis vérifiés avant d'entrer dans la bibliothèque. "
+        "Restez sur cette page pendant la vérification : changer de page vide le dépôt."
     )
 
     n_depot = st.session_state.get(COMPTEUR_DEPOT, 0)
@@ -150,7 +170,7 @@ def afficher_import() -> None:
     if etat is None or etat["signature"] != signature:
         if etat is not None:  # de nouveaux fichiers : le récapitulatif de l'import précédent n'a plus lieu d'être
             st.session_state.pop(RECAP, None)
-        etat = {"signature": signature, "fichiers": _analyser(fichiers)}
+        etat = {"signature": signature, "fichiers": _analyses_a_jour(fichiers, etat["fichiers"] if etat else [])}
         st.session_state[ETAT] = etat
 
     recap = st.session_state.get(RECAP)
@@ -163,19 +183,25 @@ def afficher_import() -> None:
 
     bibliotheque = search_chants()
     decisions = []
-    for i, f in enumerate(f for f in etat["fichiers"] if not f["refus"]):
+    for i, f in enumerate(etat["fichiers"]):
+        if f["refus"]:
+            continue
+        cle = f.get("cle") or f"f{i}"
         st.markdown(f"### 📄 {f['nom']}")
         for note in f["notes"]:
             st.caption(f"ℹ️ {note}")
         if not f["chants"]:
             st.info("Aucun chant reconnu dans ce fichier.")
         for j, chant in enumerate(f["chants"]):
-            # Le jeu de fichiers entre dans les clés des champs : de nouveaux fichiers ne reprennent pas d'anciennes saisies
-            decision = _carte(f"imp_{n_depot}_{abs(hash(signature)) % 10**8}_{i}_{j}", f["nom"], chant, bibliotheque)
+            # La clé du fichier (et non le jeu de fichiers) entre dans les clés des champs : ajouter ou retirer un
+            # autre fichier garde les saisies de celui-ci ; un dépôt vidé (n_depot) repart de zéro
+            decision = _carte(f"imp_{n_depot}_{cle}_{j}", f["nom"], chant, bibliotheque)
             if decision is not None:
                 decisions.append(decision)
 
     if any(f["chants"] for f in etat["fichiers"]):
+        # Un doublon différent laissé sur « Ignorer » ne fera rien : il n'est pas compté
+        decisions = [d for d in decisions if not (d.statut_vu is Doublon.DIFFERENT and d.action is Action.IGNORER)]
         n = len(decisions)
         if st.button(f"Importer {n} chant{'s' if n > 1 else ''}", type="primary", key="import_go", disabled=n == 0):
             st.session_state[RECAP] = importer_chants(decisions)

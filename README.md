@@ -63,7 +63,7 @@ Pour utiliser des volumes nommés au lieu de dossiers locaux, adapter la section
 ## Mise à jour
 
 - **Sauvegardez `data/chants.db`** (ou le volume `/data` de Docker) avant de déployer une nouvelle version : la base est migrée automatiquement au démarrage, sans perte, mais une copie évite tout regret.
-- Depuis la prise en compte de la structure des chants, environ 17 % des chants sans structure gagnent une diapositive (les coupures se font désormais en fin de vers de préférence).
+- Les coupures de diapositives des chants sans structure ont été ajustées (la coupure entre couplets est préférée) : sur le corpus de la paroisse, quelques chants gagnent ou perdent une diapositive.
 - Les dépendances `python-docx`, `PyMuPDF` et `lxml` sont installées par l'image (`pip install -r requirements.txt`) ; aucune bibliothèque système n'est requise.
 - PyMuPDF est sous licence AGPL (ou licence commerciale) : sans conséquence pour une instance paroissiale ; à revoir si l'image est publiée ou l'application donnée à une autre paroisse.
 

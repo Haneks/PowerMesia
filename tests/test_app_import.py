@@ -4,6 +4,7 @@ Le dépôt de fichiers n'est pas pilotable par AppTest : l'analyse est injectée
 (`import_analyse`, avec la signature d'un dépôt vide), ce qui exerce toute la vérification et l'import."""
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from streamlit.testing.v1 import AppTest
@@ -11,6 +12,8 @@ from streamlit.testing.v1 import AppTest
 from context.models import Chant, MomentLiturgique as M, SectionChant, TypeSection
 from tests.helpers_import import L
 from tools.db_handler import create_chant, delete_chant, init_db, search_chants
+from tools.import_chants import ecran
+from tools.import_chants.ecran import _analyses_a_jour, _cle_fichier
 from tools.import_chants.parse import parse_lines
 
 APP = str(Path(__file__).resolve().parents[1] / "app.py")
@@ -93,7 +96,7 @@ def test_importer_ajoute_le_chant_avec_structure_et_ordre_puis_affiche_le_recapi
     assert chant.ordre == ["R", "1", "R", "2", "R"]
     assert [s.type for s in chant.structure] == [TypeSection.REFRAIN, TypeSection.COUPLET, TypeSection.COUPLET]
     assert any("1 ajouté(s)" in s.value for s in at.success)
-    assert not at.text_input  # l'analyse est vidée après l'import : plus aucune carte à vérifier
+    assert at.session_state["import_analyse"]["fichiers"] == []  # l'analyse est vidée après l'import
 
 
 def test_decocher_importer_n_ajoute_rien():
@@ -177,10 +180,9 @@ def test_doublon_different_propose_trois_actions_dont_ignorer_par_defaut():
     action = widget(at.radio, "_action")
     assert action.value == "ignorer" and action.options == ["Ignorer (conserver l'existant)", "Remplacer", "Ajouter quand même"]
     assert any("Un ancien texte" in t.value for t in at.text)  # ancien et nouveau texte affichés
-    bouton_import(at).click().run()
+    assert bouton_import(at).disabled and bouton_import(at).label == "Importer 0 chant"  # « Ignorer » ne fait rien
     [reste] = search_chants()
     assert reste.paroles == "Un ancien texte"
-    assert any("1 ignoré(s)" in s.value for s in at.success)
 
 
 def test_doublon_different_remplacer():
@@ -245,3 +247,72 @@ def test_chant_nouveau_de_meme_titre_dans_un_autre_recueil_affiche_une_legende_d
 def test_pas_de_legende_de_titre_voisin_sans_chant_de_meme_titre():
     at = page([fichier()])
     assert not any("même titre existe déjà" in c.value for c in at.caption)
+
+
+AUTRE_FEUILLE = [
+    L("Communion", gras=True, souligne=True),
+    L("Partageons le pain inventé", gras=True),
+    L("Un couplet de communion inventé", vide=True),
+]
+
+
+def test_le_libelle_ne_compte_pas_les_doublons_differents_laisses_sur_ignorer():
+    _chant_existant_different()
+    at = page([fichier(), fichier(chants=chants_analyses(AUTRE_FEUILLE), nom="autre.docx")])
+    assert bouton_import(at).label == "Importer 1 chant" and not bouton_import(at).disabled
+    widget(at.radio, "_action").set_value("remplacer").run()
+    assert bouton_import(at).label == "Importer 2 chants"
+
+
+def test_la_legende_demande_de_rester_sur_la_page():
+    at = AppTest.from_file(APP, default_timeout=30).run()
+    at.sidebar.radio[0].set_value(PAGE).run()
+    assert any("Restez sur cette page pendant la vérification : changer de page vide le dépôt." in c.value for c in at.caption)
+
+
+def test_les_saisies_d_une_carte_survivent_a_l_ajout_d_un_autre_fichier():
+    a = {**fichier(nom="a.docx"), "cle": "a"}
+    b = {**fichier(chants=chants_analyses(AUTRE_FEUILLE), nom="b.docx"), "cle": "b"}
+    at = page([a, b])
+    at.text_input(key="imp_0_a_0_titre").set_value("Titre corrigé à la main").run()
+    c = {**fichier(chants=chants_analyses(AUTRE_FEUILLE), nom="c.docx"), "cle": "c"}
+    at.session_state["import_analyse"] = {"signature": (), "fichiers": [c, a, b]}  # le nouveau fichier passe devant
+    at.run()
+    assert not at.exception
+    assert at.text_input(key="imp_0_a_0_titre").value == "Titre corrigé à la main"
+    assert at.text_input(key="imp_0_c_0_titre").value == "Partageons le pain inventé"
+
+
+class _Analyse:
+    chants, notes = [], []
+
+
+def _faux_fichier(nom, taille=10, file_id=None):
+    return SimpleNamespace(name=nom, size=taille, file_id=file_id, getvalue=lambda: b"x")
+
+
+def test_cle_fichier_prefere_l_identifiant_du_depot_sinon_nom_et_taille():
+    assert _cle_fichier(_faux_fichier("a.docx", 10, "id-1")) == "id-1"
+    assert _cle_fichier(_faux_fichier("a.docx", 10)) == "a.docx-10"
+
+
+def test_deux_fichiers_de_meme_nom_et_meme_taille_ont_des_cles_differentes(monkeypatch):
+    monkeypatch.setattr(ecran, "analyser_fichier", lambda nom, octets: _Analyse())
+    analyses = _analyses_a_jour([_faux_fichier("a.docx"), _faux_fichier("a.docx"), _faux_fichier("a.docx")], [])
+    assert [x["cle"] for x in analyses] == ["a.docx-10", "a.docx-10-2", "a.docx-10-3"]
+
+
+def test_analyses_a_jour_ne_reanalyse_pas_un_fichier_deja_analyse(monkeypatch):
+    appels = []
+
+    def faux_analyser(nom, octets):
+        appels.append(nom)
+        return _Analyse()
+
+    monkeypatch.setattr(ecran, "analyser_fichier", faux_analyser)
+    premieres = _analyses_a_jour([_faux_fichier("a.docx"), _faux_fichier("b.docx")], [])
+    assert appels == ["a.docx", "b.docx"]
+    suivantes = _analyses_a_jour([_faux_fichier("c.docx"), _faux_fichier("a.docx"), _faux_fichier("b.docx")], premieres)
+    assert appels == ["a.docx", "b.docx", "c.docx"]  # seul le nouveau est analysé
+    assert [x["nom"] for x in suivantes] == ["c.docx", "a.docx", "b.docx"]
+    assert suivantes[1] is premieres[0] and suivantes[2] is premieres[1]
