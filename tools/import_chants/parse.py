@@ -151,24 +151,66 @@ def _chercher_entetes(lignes: list[Line]) -> list[_Entete]:
     return entetes
 
 
+_SEPARATEURS_DE_TETE = re.compile(r"^[\s:;,.–—-]+")
+_SEPARATEURS_DE_QUEUE = re.compile(r"[\s:;,.–—-]+$")
+_NUMERO_DE_PSAUME = re.compile(r"(?:\d+[a-z]?|[a-z])(?:\s+(?:\d+[a-z]?|[a-z]))*", re.IGNORECASE)
+# Complément de l'intitulé du moment (« Acclamation de l'Évangile », « Agneau de l'Alliance »)
+_SUITE_DE_L_INTITULE = re.compile(r"(?:d'|l'|(?:de|du|des|le|la|au|a)\b)")
+
+
+def _est_un_numero_de_psaume(texte: str) -> bool:
+    """« 22 », « 22 (21) », « 117 », « 22b » : un numéro de psaume, jamais un recueil."""
+    return bool(_NUMERO_DE_PSAUME.fullmatch(re.sub(r"[()]|[:;,.–—-]", " ", texte).strip()))
+
+
+def _classer_la_suite(suite: str) -> tuple[Optional[str], Optional[str]]:
+    """
+    (recueil, paroles collées) pour ce qui suit le mot-moment ou les 3 espaces. Les séparateurs de tête
+    (« : », « – ») sont retirés. Une virgule, un point ou des deux-points avant le texte l'annoncent
+    comme des paroles (« Gloire à Dieu, au plus haut… ») ; un tiret, comme un recueil.
+    """
+    prefixe = _SEPARATEURS_DE_TETE.match(suite)
+    texte = suite[prefixe.end():].strip() if prefixe else suite.strip()
+    if not texte:
+        return None, None
+    if prefixe and re.search(r"[,;.:]", prefixe.group()):
+        return None, texte
+    if _ressemble_a_un_recueil(texte):
+        return clean_spaces(texte), None
+    return None, texte
+
+
 def _decomposer_entete(texte: str) -> tuple[str, Optional[str], Optional[str]]:
     """(partie gauche : titre ou moment, recueil, reste = paroles collées à l'en-tête)."""
     texte = _BIS.sub("", texte)  # « (bis) » ou « 2x » en fin d'en-tête : une reprise, pas un recueil
+    gauche, recueil, collees = _decouper_entete(texte)
+    if _moment_en_tete(gauche)[0] is not None:  # « Entrée : » : le séparateur n'appartient pas au nom du moment
+        gauche = _SEPARATEURS_DE_QUEUE.sub("", gauche)
+    return gauche, recueil, collees
+
+
+def _decouper_entete(texte: str) -> tuple[str, Optional[str], Optional[str]]:
     m = re.search(r"\(([^)]*)\)?\s*$", texte)
     if m:
-        return texte[:m.start()].strip(), clean_spaces(m.group(1)) or None, None
+        gauche, recueil = texte[:m.start()].strip(), clean_spaces(m.group(1)) or None
+        if recueil and _moment_en_tete(gauche)[0] is M.PSAUME and _est_un_numero_de_psaume(recueil):
+            return texte.strip(), None, None  # « Psaume 22 (21) » : le numéro n'est pas un recueil
+        return gauche, recueil, None
     morceaux = re.split(r"\s{3,}", texte, maxsplit=1)
     if len(morceaux) == 2:
-        gauche, droite = morceaux
-        if _ressemble_a_un_recueil(droite):
-            return gauche.strip(), clean_spaces(droite), None
-        return gauche.strip(), None, droite.strip()
+        gauche, droite = morceaux[0].strip(), morceaux[1]
+        if _moment_en_tete(gauche)[0] is M.PSAUME and _est_un_numero_de_psaume(droite):
+            return clean_spaces(f"{gauche} {droite}"), None, None  # « Psaume   22 »
+        recueil, collees = _classer_la_suite(droite)
+        return gauche, recueil, collees
     moment, reste = _moment_en_tete(texte)
     if moment is not None and reste.strip():
-        gauche = texte[: len(texte) - len(reste)].strip()
-        if _ressemble_a_un_recueil(reste):
-            return gauche, clean_spaces(reste), None
-        return gauche, None, reste.strip()
+        if moment is M.PSAUME and _est_un_numero_de_psaume(reste):
+            return texte.strip(), None, None  # « Psaume 22 », « Psaume 22 : »
+        if _SUITE_DE_L_INTITULE.match(_sans_accents(reste.lstrip())):
+            return texte.strip(), None, None  # « Acclamation de l'Évangile » : suite de l'intitulé du moment
+        recueil, collees = _classer_la_suite(reste)
+        return texte[: len(texte) - len(reste)].strip(), recueil, collees
     return texte.strip(), None, None
 
 

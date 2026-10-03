@@ -3,6 +3,8 @@ Tests de verrouillage de tools/import_chants/parse.py : une règle de la spec §
 Textes inventés (aucune parole réelle).
 """
 
+import re
+
 import pytest
 
 from context.models import MomentLiturgique as M
@@ -349,3 +351,62 @@ def test_titre_explicite_avec_un_jour_de_la_semaine_n_est_pas_un_en_tete_de_feui
     lignes = [L("Title: Dimanche en famille"), L("Artist: Un recueil"), L("Un vers inventé", vide=True)]
     [chant] = parse_lines(lignes, "x.docx").chants
     assert chant.titre == "Dimanche en famille"
+
+
+# --- C1. Texte collé après le mot-moment d'un en-tête : ni séparateur de tête, ni numéro pris pour un recueil ---
+
+# (en-tête, moment, recueil, titre) ; le corps est toujours un refrain en gras puis un couplet.
+_ENTETES_AVEC_SUITE = [
+    ("Entrée :", M.ENTREE, None, "Chantons au bord de l'eau"),
+    ("Gloire :", M.GLOIRE, None, "Gloire"),
+    ("Sanctus :", M.SANCTUS, None, "Sanctus"),
+    ("Prière universelle :", M.PU, None, "Prière universelle"),
+    ("Psaume 22 :", M.PSAUME, None, "Psaume 22"),
+    ("Psaume 22", M.PSAUME, None, "Psaume 22"),
+    ("Psaume 22 (21)", M.PSAUME, None, "Psaume 22 (21)"),
+    ("Psaume 117", M.PSAUME, None, "Psaume 117"),
+    ("Psaume   22", M.PSAUME, None, "Psaume 22"),
+    ("Acclamation de l'Évangile", M.ALLELUIA, None, "Acclamation de l'Évangile"),
+    ("Agneau de l'Alliance", M.AGNEAU, None, "Agneau de l'Alliance"),
+    ("Pardon – Messe du Partage", M.PARDON, "Messe du Partage", "Pardon – Messe du Partage"),
+    ("Pardon :   Recueil Aurore 2", M.PARDON, "Recueil Aurore 2", "Pardon – Recueil Aurore 2"),
+    ("Gloire à Dieu, au plus haut des cieux", M.GLOIRE, None, "Gloire à Dieu"),
+]
+
+
+@pytest.mark.parametrize("en_tete, moment, recueil, titre", _ENTETES_AVEC_SUITE,
+                         ids=["entree_deux_points", "gloire_deux_points", "sanctus_deux_points", "pu_deux_points",
+                              "psaume_numero_deux_points", "psaume_numero", "psaume_numero_et_parentheses",
+                              "psaume_trois_chiffres", "psaume_numero_apres_trois_espaces", "acclamation_de_l_evangile", "agneau_de_l_alliance",
+                              "pardon_tiret_recueil", "pardon_deux_points_puis_recueil",
+                              "gloire_paroles_collees"])
+def test_texte_apres_le_mot_moment_d_un_en_tete(en_tete, moment, recueil, titre):
+    lignes = [L(en_tete, gras=True, souligne=True), L("Chantons au bord de l'eau", gras=True),
+              L("Premier couplet inventé", vide=True)]
+    [chant] = parse_lines(lignes, "x.docx").chants
+    assert (chant.moment, chant.recueil, chant.titre) == (moment, recueil, titre)
+    premieres = [s.lignes[0] for s in chant.structure]
+    assert not any(not re.search(r"\w", ligne) or ligne in ("22 :", "22") for ligne in toutes_les_lignes(chant))
+    assert not any(p.startswith((":", ",", "–")) for p in premieres)
+
+
+def test_des_vraies_paroles_collees_apres_le_moment_restent_des_paroles_sans_ponctuation_de_tete():
+    lignes = [L("Gloire à Dieu, au plus haut des cieux", gras=True, souligne=True), L("Et paix sur la terre")]
+    [chant] = parse_lines(lignes, "x.docx").chants
+    assert chant.recueil is None
+    assert toutes_les_lignes(chant) == ["au plus haut des cieux", "Et paix sur la terre"]
+
+
+def test_entree_deux_points_donne_un_titre_tire_du_refrain_et_pas_de_ligne_de_ponctuation():
+    lignes = [L("Entrée :", gras=True, souligne=True), L("Premier couplet inventé"),
+              L("Chantons au bord de l'eau", gras=True, vide=True)]
+    [chant] = parse_lines(lignes, "x.docx").chants
+    assert ids(chant) == ["1", "R"]
+    assert chant.titre == "Chantons au bord de l'eau"
+    assert toutes_les_lignes(chant) == ["Premier couplet inventé", "Chantons au bord de l'eau"]
+
+
+def test_psaume_avec_recueil_reel_garde_son_numero_dans_le_titre():
+    lignes = [L("Psaume 22   Recueil Aurore 2", gras=True, souligne=True), L("Le Seigneur est mon berger", gras=True)]
+    [chant] = parse_lines(lignes, "x.docx").chants
+    assert (chant.recueil, chant.titre) == ("Recueil Aurore 2", "Psaume 22 – Recueil Aurore 2")
