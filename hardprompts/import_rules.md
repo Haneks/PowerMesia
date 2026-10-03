@@ -38,3 +38,19 @@ mémoire. Partitions (police de notation, texte en syllabes) et PDF-images : ref
 Un psaume dont le refrain est écrit sur la ligne d'en-tête, quand toute la ligne est en gras et soulignée,
 est signalé « rien à importer » : le refrain y est indiscernable d'un recueil. Le cas courant (refrain en
 gras dans le corps du psaume) est géré.
+
+## Écran d'import, doublons et enregistrement (livraison 3)
+
+- **Doublon** : même titre et même recueil une fois normalisés (casse, accents, apostrophes, ponctuation et
+  espaces ignorés). Texte identique : ignoré. Texte différent : l'utilisateur choisit Ignorer (défaut),
+  Remplacer ou Ajouter quand même. Même texte mais l'import apporte une structure (refrains) que le chant
+  existant n'a pas : « différent » (le remplacement ajoute les refrains en gras).
+- **Remplacer** garde l'identité du chant (id) et les champs saisis à la main (auteur, compositeur,
+  référence, notes) ; titre, recueil, paroles, structure et ordre sont remplacés ; les moments sont réunis
+  (ceux de la bibliothèque d'abord, puis les nouveaux) : ils sont saisis à la main et absents de la comparaison.
+- Les doublons sont recalculés contre la base au moment de l'enregistrement : un chant « nouveau » à l'écran
+  qui est devenu un doublon dans le même lot est ignoré (« doublon dans cet import »).
+- **Édition** : changer le type d'une section renumérote les identifiants (refrains R, R2 ; couplets 1, 2 ;
+  ponts P, P2) et recalcule l'ordre chanté ; une section sans texte n'est pas importée ; l'ordre est
+  modifiable (identifiants séparés par des espaces, `·`, virgules ; casse ignorée) et refusé s'il cite une
+  section inconnue.

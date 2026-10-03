@@ -204,6 +204,23 @@ mémoire, rien n'est conservé sur le disque. Le HTML et les macros ne sont jama
 automatiquement. Texte différent : **Remplacer** (ancien et nouveau texte affichés), **Ignorer** (défaut) ou
 **Ajouter quand même**.
 
+### Précisions apportées en livraison 3
+
+- Modules : `brouillon.py` (édition des sections et de l'ordre, conversion en `Chant`), `enregistrer.py`
+  (écriture en base selon la décision prise pour chaque doublon) et `ecran.py` (Streamlit) ; `ecran.py`
+  reste dans `tools/import_chants/` parce que l'image Docker ne copie que `tools/`.
+- Doublon « texte identique » : le texte est comparé après normalisation (casse, accents, ponctuation,
+  espaces). Si l'import apporte une structure que le chant existant n'a pas, le chant est « différent » :
+  Remplacer ajoute les refrains en gras au lieu de les ignorer silencieusement.
+- Remplacer garde l'id et les champs saisis à la main (auteur, compositeur, référence, notes) et réunit les moments
+  (anciens puis nouveaux) au lieu de les écraser.
+- Les doublons sont recalculés à l'enregistrement : un chant « nouveau » devenu doublon dans le même lot est
+  ignoré et signalé ; une erreur de base sur un chant n'arrête pas les autres.
+- L'ordre chanté est un champ texte modifiable (`R · 1 · R · 2 · R`) ; il est recalculé quand un type de
+  section, une section vide ou « Répéter le refrain » change (une saisie manuelle de l'ordre est alors perdue).
+- Dépôt limité à 10 Mo par Streamlit (`maxUploadSize`) en plus du plafond de `analyser_fichier`.
+- Tests d'écran : AppTest ne pilote pas `st.file_uploader` ; l'analyse est injectée dans l'état de session.
+
 ## 9. Tests
 
 - Documents Word et PDF **fabriqués par les tests** (python-docx, PyMuPDF), un par convention du §3 :
