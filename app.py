@@ -61,14 +61,6 @@ if menu == "📅 Générer une messe":
     date_messe = st.sidebar.date_input("Date de la messe")
     date_str = date_messe.strftime("%Y-%m-%d")
 
-    theme = st.sidebar.radio(
-        "Thème visuel",
-        ["Fond foncé – texte clair", "Fond clair – texte foncé"],
-        index=0,
-        help="Couleur de fond et du texte des slides.",
-    )
-    theme_key = "dark" if theme.startswith("Fond foncé") else "light"
-
     if st.sidebar.button("Récupérer les lectures"):
         with st.spinner("Appel API AELF..."):
             data = get_messe(date_str)
@@ -191,7 +183,7 @@ if menu == "📅 Générer une messe":
                                 "intro_lue": b.get("intro_lue", ""),
                                 "contenu": b.get("contenu", ""),
                             })
-                    generate_pptx(pptx_blocs, out, theme=theme_key)
+                    generate_pptx(pptx_blocs, out)
                     with open(out, "rb") as f:
                         st.session_state["pptx_bytes"] = f.read()
                     st.session_state["pptx_filename"] = out.name
