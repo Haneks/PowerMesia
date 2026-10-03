@@ -93,37 +93,49 @@ def _tokenize(s: str, mode: Mode) -> list[_Token]:
     tokens: list[_Token] = []
     stack: list[str] = []
     carry_start = None
+    carry_end = 0
+    carry_was_open = False
     last_run_end = 0
 
     for m in re.finditer(r"[^ \n]+", s):
+        text = m.group()
+        if not text.strip():
+            continue  # espace insécable isolée : ce n'est pas un mot
         gap_before = s[last_run_end:m.start()]
         last_run_end = m.end()
-        text = m.group()
         same_line = "\n" not in gap_before
 
         is_closing = bool(_CLOSING_ONLY.match(text)) or (text == '"' and stack and stack[-1] == '"')
-        if tokens and is_closing and (mode == "text" or same_line):
+        if tokens and is_closing and carry_start is None and (mode == "text" or same_line):
             tokens[-1].end = m.end()
             _update_quotes(stack, text)
             tokens[-1].in_quote = bool(stack)
             continue
 
-        start = carry_start if carry_start is not None else m.start()
+        carried = carry_start is not None
+        start = carry_start if carried else m.start()
+        was_open = carry_was_open if carried else bool(stack)
         carry_start = None
         if _OPENING_ONLY.match(text) or (text == '"' and not stack):
-            carry_start = start
+            carry_start, carry_end, carry_was_open = start, m.end(), was_open
             _update_quotes(stack, text)
             continue
 
-        was_open = bool(stack)
         prev_open = tokens[-1].quote_open if tokens else -1
-        _update_quotes(stack, s[start:m.end()] if start != m.start() else text)
+        _update_quotes(stack, text)
         idx = len(tokens)
         if stack:
             quote_open = prev_open if was_open and prev_open >= 0 else idx
         else:
             quote_open = -1
         tokens.append(_Token(start, m.end(), in_quote=bool(stack), quote_open=quote_open))
+
+    if carry_start is not None:  # ouvrant isolé en toute fin de texte : on le garde
+        if tokens:
+            tokens[-1].end = carry_end
+            tokens[-1].in_quote = bool(stack)
+        else:
+            tokens.append(_Token(carry_start, carry_end, in_quote=bool(stack), quote_open=0 if stack else -1))
 
     # séparateurs : "\n\n" > "\n" > " "
     for k, tok in enumerate(tokens[:-1]):
@@ -148,8 +160,10 @@ def _ending(token_text: str) -> str:
 
 
 def _last_word_is_dangling(token_text: str) -> bool:
-    word = re.sub(r"[^\wÀ-ÿ’']", "", token_text.split()[-1]).lower()
-    return word in _DANGLING
+    words = token_text.split()
+    if not words:
+        return False
+    return re.sub(r"[^\wÀ-ÿ’']", "", words[-1]).lower() in _DANGLING
 
 
 def _starts_clause(token_text: str) -> bool:
