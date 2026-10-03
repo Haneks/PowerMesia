@@ -15,7 +15,14 @@ from pptx.dml.color import RGBColor
 from pptx.enum.text import MSO_VERTICAL_ANCHOR, PP_ALIGN
 from pptx.util import Inches, Pt
 
-from tools.slicing import DEFAULT_CHARS_PER_LINE, DEFAULT_MAX_CHARS, clean_spaces, split_text_for_slides
+from tools.chant_structure import BlocLine, compute_ordre, expand_lines, sections_from_dicts
+from tools.slicing import (
+    DEFAULT_CHARS_PER_LINE,
+    DEFAULT_MAX_CHARS,
+    clean_spaces,
+    split_lines_for_slides,
+    split_text_for_slides,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = PROJECT_ROOT / "args" / "config.yaml"
@@ -54,15 +61,25 @@ def _style_run(run, font_cfg: dict, default_size: int, bold: bool = False) -> No
     run.font.bold = bold
 
 
-def _write_lines(text_frame, text: str, font_cfg: dict, default_size: int, bold: bool = False) -> None:
-    """Un paragraphe par ligne (les chants gardent leurs retours à la ligne)."""
-    for i, line in enumerate(text.split("\n")):
+def _as_lines(text: str) -> list[BlocLine]:
+    """Texte à plat → lignes (texte, gras=False)."""
+    return [(line, False) for line in text.split("\n")]
+
+
+def _write_lines(
+    text_frame, lines: list[BlocLine], font_cfg: dict, default_size: int, bold: bool = False
+) -> None:
+    """
+    Un paragraphe par ligne (les chants gardent leurs retours à la ligne).
+    `bold` met tout en gras ; sinon le gras suit l'indicateur de chaque ligne (refrain).
+    """
+    for i, (line, line_bold) in enumerate(lines):
         p = text_frame.paragraphs[0] if i == 0 else text_frame.add_paragraph()
         p.alignment = PP_ALIGN.CENTER
         # Une ligne vide (entre deux couplets) garde la hauteur de la police.
         p.font.size = Pt(font_cfg.get("size", default_size))
         if line:
-            _style_run(p.add_run(), font_cfg, default_size, bold)
+            _style_run(p.add_run(), font_cfg, default_size, bold or line_bold)
             p.runs[0].text = line
 
 
@@ -70,7 +87,7 @@ def _add_slide(
     prs: Presentation,
     config: dict,
     title: str,
-    body: str,
+    body: "str | list[BlocLine]",
     slide_type: str = "lecture",
 ) -> None:
     """Ajoute une slide centrée. slide_type: 'lecture' | 'chant' | 'message'."""
@@ -90,13 +107,29 @@ def _add_slide(
     # Titre : "[Titre] - x/y"
     title_box = slide.shapes.add_textbox(left, Inches(0.3), width, Inches(0.6))
     title_box.text_frame.word_wrap = True
-    _write_lines(title_box.text_frame, title, design.get("title", {}), 24, bold=design.get("title", {}).get("bold", True))
+    _write_lines(
+        title_box.text_frame, _as_lines(title), design.get("title", {}), 24,
+        bold=design.get("title", {}).get("bold", True),
+    )
 
     # Corps centré (horizontal et vertical)
     body_box = slide.shapes.add_textbox(left, Inches(1.0), width, Inches(height_in - 1.0 - 0.3))
     body_box.text_frame.word_wrap = True
     body_box.text_frame.vertical_anchor = MSO_VERTICAL_ANCHOR.MIDDLE
-    _write_lines(body_box.text_frame, body, design.get("text", {}), 54)
+    body_lines = _as_lines(body) if isinstance(body, str) else body
+    _write_lines(body_box.text_frame, body_lines, design.get("text", {}), 54)
+
+
+def _chant_pages(bloc: dict, split_kwargs: dict) -> list:
+    """
+    Slides d'un chant. Chant structuré : ordre chanté, refrain en gras. Sinon : paroles à plat,
+    comme avant.
+    """
+    sections = sections_from_dicts(bloc.get("structure") or [])
+    if not sections:
+        return split_text_for_slides(bloc.get("paroles", ""), mode="chant", **split_kwargs)
+    ordre = bloc.get("ordre") or compute_ordre(sections)
+    return split_lines_for_slides(expand_lines(sections, ordre), **split_kwargs)
 
 
 def generate_pptx(
@@ -125,22 +158,22 @@ def generate_pptx(
 
         if t == "lecture":
             label = clean_spaces(bloc.get("intro_lue") or bloc.get("reference") or "Lecture")
-            chunks = split_text_for_slides(_strip_html(bloc.get("contenu", "")), **split_kwargs)
+            pages = split_text_for_slides(_strip_html(bloc.get("contenu", "")), **split_kwargs)
         elif t == "chant":
             label = clean_spaces(bloc.get("titre", "Chant"))
-            chunks = split_text_for_slides(bloc.get("paroles", ""), mode="chant", **split_kwargs)
+            pages = _chant_pages(bloc, split_kwargs)
         elif t == "message":
             label = clean_spaces(bloc.get("titre", "Message"))
-            chunks = split_text_for_slides(_strip_html(bloc.get("contenu", "")), **split_kwargs)
+            pages = split_text_for_slides(_strip_html(bloc.get("contenu", "")), **split_kwargs)
         else:
             continue
 
-        y = len(chunks)
+        y = len(pages)
         total_slides += y
         print(f"[pptx] {label} : {y} slide(s) générée(s)", flush=True)
 
-        for x, chunk in enumerate(chunks, start=1):
-            _add_slide(prs, config, f"{label} - {x}/{y}", chunk, slide_type=t)
+        for x, page in enumerate(pages, start=1):
+            _add_slide(prs, config, f"{label} - {x}/{y}", page, slide_type=t)
 
     print(f"[pptx] Total : {total_slides} slide(s)", flush=True)
 
