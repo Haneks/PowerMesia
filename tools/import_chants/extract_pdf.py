@@ -20,6 +20,7 @@ _TOLERANCE_LIGNE = 3.0       # écart de ligne de base (pt) pour qu'un caractèr
 _TOLERANCE_COPIE = 1.5       # écart (pt) en dessous duquel deux caractères identiques sont une même copie
 _COPIES_FAUX_GRAS = 3        # un caractère imprimé 3 fois ou plus est du « faux gras »
 _RATIO_LIGNE_VIDE = 1.75     # écart entre deux lignes, en tailles de police, au-delà duquel une ligne vide les sépare
+_PAGES_MAX = 50              # au-delà, ce n'est pas une feuille de chants (refus avant tout traitement de page)
 _ESPACE_ENTRE_MOTS = 0.25    # écart (en tailles de police) à partir duquel on insère une espace
 # Erreurs levées par PyMuPDF en lisant les pages d'un PDF ouvert. Les erreurs de MuPDF (arbre des pages
 # mal formé...) sont des FzErrorBase, qui n'héritent PAS de RuntimeError.
@@ -164,6 +165,8 @@ def extract_pdf(data: bytes) -> list[Line]:
         # Ouvert sans mot de passe, un PDF protégé n'est pas lisible : l'itération sur ses pages lèverait ValueError.
         if document.needs_pass:
             raise UnsupportedFile("PDF protégé par un mot de passe")
+        if document.page_count > _PAGES_MAX:
+            raise UnsupportedFile("PDF trop long pour une feuille de chants")
         _verifier_exploitable(document)
         return _lignes_du_document(document)
     except _ERREURS_DE_LECTURE as e:

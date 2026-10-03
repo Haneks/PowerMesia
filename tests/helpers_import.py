@@ -1,6 +1,7 @@
 """Fabrique de fichiers Word et PDF pour les tests de l'import (textes inventés, rien du corpus)."""
 
 import io
+import zipfile
 
 import fitz
 from docx import Document
@@ -97,4 +98,35 @@ def pdf_en_syllabes() -> bytes:
     page = document.new_page()
     for k in range(150):
         page.insert_text((20 + (k % 25) * 22, 60 + (k // 25) * 30), ["la", "so", "a"][k % 3], fontsize=10)
+    return document.tobytes()
+
+
+def docx_partie_remplacee(data: bytes, partie: str, transformation) -> bytes:
+    """Recopie un .docx en appliquant `transformation(octets) -> octets` à une de ses parties (ex. word/document.xml)."""
+    sortie = io.BytesIO()
+    with zipfile.ZipFile(io.BytesIO(data)) as entree, zipfile.ZipFile(sortie, "w", zipfile.ZIP_DEFLATED) as zout:
+        for nom in entree.namelist():
+            contenu = entree.read(nom)
+            zout.writestr(nom, transformation(contenu) if nom == partie else contenu)
+    return sortie.getvalue()
+
+
+def docx_avec_entrees_en_plus(entrees: dict) -> bytes:
+    """Un .docx valide auquel on ajoute des entrées (nom -> octets), pour tester les gardes de décompression."""
+    sortie = io.BytesIO()
+    with zipfile.ZipFile(io.BytesIO(docx_bytes(["un vers inventé"]))) as entree, \
+            zipfile.ZipFile(sortie, "w", zipfile.ZIP_DEFLATED) as zout:
+        for nom in entree.namelist():
+            if nom not in entrees:
+                zout.writestr(nom, entree.read(nom))
+        for nom, contenu in entrees.items():
+            zout.writestr(nom, contenu)
+    return sortie.getvalue()
+
+
+def pdf_de_pages(nombre: int) -> bytes:
+    """Un PDF de `nombre` pages, chacune avec une ligne de texte."""
+    document = fitz.open()
+    for _ in range(nombre):
+        _ecrire_lignes(document.new_page(), [{"texte": "Le vent du soir se lève sur la ville", "y": 100}])
     return document.tobytes()

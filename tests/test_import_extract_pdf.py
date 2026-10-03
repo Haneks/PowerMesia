@@ -2,7 +2,8 @@
 
 import pytest
 
-from tests.helpers_import import pdf_bytes, pdf_deux_pages, pdf_en_syllabes, pdf_image_seule, pdf_protege
+from tests.helpers_import import (
+    pdf_bytes, pdf_de_pages, pdf_deux_pages, pdf_en_syllabes, pdf_image_seule, pdf_protege)
 from tools.import_chants.extract_pdf import _raison_de_refus, extract_pdf
 from tools.import_chants.modeles import UnsupportedFile
 
@@ -92,3 +93,15 @@ def test_deux_pages_sont_lues_dans_l_ordre_et_la_page_2_ouvre_un_bloc():
 def test_raison_de_refus(polices, caracteres, empans, images, attendu):
     raison = _raison_de_refus(polices, caracteres, empans, images)
     assert (raison is None) if attendu is None else (attendu in raison)
+
+
+# --- I2. Un PDF de plus de 50 pages n'est pas une feuille de chants ---
+
+def test_pdf_de_51_pages_est_refuse_avant_le_traitement_des_pages():
+    with pytest.raises(UnsupportedFile) as erreur:
+        extract_pdf(pdf_de_pages(51))
+    assert erreur.value.raison == "PDF trop long pour une feuille de chants"
+
+
+def test_pdf_de_50_pages_est_lu():
+    assert len(extract_pdf(pdf_de_pages(50))) == 50

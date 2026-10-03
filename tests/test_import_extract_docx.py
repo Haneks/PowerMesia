@@ -11,7 +11,7 @@ from docx.enum.style import WD_STYLE_TYPE
 from docx.oxml import parse_xml
 from docx.oxml.ns import nsdecls
 
-from tests.helpers_import import docx_bytes
+from tests.helpers_import import docx_avec_entrees_en_plus, docx_bytes, docx_partie_remplacee
 from tools.import_chants.extract_docx import extract_docx
 from tools.import_chants.modeles import UnsupportedFile
 
@@ -176,3 +176,70 @@ def test_style_cyclique_ne_boucle_pas():
     thread.start()
     thread.join(timeout=5)
     assert not thread.is_alive(), "extract_docx est bloquée sur un style cyclique"
+
+
+# --- I1. Un .docx abîmé mais bien formé donne UnsupportedFile, jamais une exception brute ---
+
+_W = b"http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+
+
+def _docx_abime(cas: str) -> bytes:
+    if cas == "racine_inattendue":
+        return docx_partie_remplacee(docx_bytes(["vers"]), "word/document.xml", lambda _: b'<racine xmlns:w="' + _W + b'"/>')
+    if cas == "sans_body":
+        return docx_partie_remplacee(
+            docx_bytes(["vers"]), "word/document.xml", lambda _: b'<w:document xmlns:w="' + _W + b'"/>')
+    if cas == "gras_invalide":
+        return docx_partie_remplacee(
+            docx_bytes([[("vers", "g")]]), "word/document.xml", lambda x: x.replace(b"<w:b/>", b'<w:b w:val="maybe"/>'))
+    if cas == "souligne_invalide":
+        return docx_partie_remplacee(
+            docx_bytes([[("vers", "s")]]), "word/document.xml",
+            lambda x: x.replace(b'<w:u w:val="single"/>', b'<w:u w:val="weird"/>'))
+    if cas == "styles_racine_inattendue":
+        return docx_partie_remplacee(
+            docx_bytes(["vers"], style_gras=True), "word/styles.xml", lambda _: b'<racine xmlns:w="' + _W + b'"/>')
+    if cas == "ooxml_strict":
+        strict = b"http://purl.oclc.org/ooxml/wordprocessingml/main"
+        return docx_partie_remplacee(docx_bytes(["vers"]), "word/document.xml", lambda x: x.replace(_W, strict))
+    raise AssertionError(cas)
+
+
+@pytest.mark.parametrize("cas", ["racine_inattendue", "sans_body", "gras_invalide", "souligne_invalide",
+                                 "styles_racine_inattendue", "ooxml_strict"])
+def test_docx_abime_mais_bien_forme_est_refuse_proprement(cas):
+    with pytest.raises(UnsupportedFile) as erreur:
+        extract_docx(_docx_abime(cas))
+    assert "Word" in erreur.value.raison
+
+
+# --- I2. Garde anti-bombe de décompression, et résolution des styles mémoïsée ---
+
+MO = 1024 * 1024
+ENTREES_D_UN_DOCX = len(zipfile.ZipFile(io.BytesIO(docx_bytes(["x"]))).namelist())
+
+
+@pytest.mark.parametrize("entrees", [
+    {"word/document.xml": bytes(6 * MO)},
+    {f"word/media/{k}.bin": b"x" for k in range(1001 - ENTREES_D_UN_DOCX)},
+    {f"word/media/{k}.bin": bytes(6 * MO) for k in range(9)},
+], ids=["document_xml_de_6_mo", "mille_et_une_entrees", "somme_de_54_mo"])
+def test_docx_trop_volumineux_une_fois_decompresse_est_refuse_avant_lecture(entrees):
+    with pytest.raises(UnsupportedFile) as erreur:
+        extract_docx(docx_avec_entrees_en_plus(entrees))
+    assert erreur.value.raison == "Fichier Word trop volumineux une fois décompressé"
+
+
+def test_docx_dans_les_limites_est_lu():
+    data = docx_avec_entrees_en_plus({f"word/media/{k}.bin": b"x" for k in range(1000 - ENTREES_D_UN_DOCX)})
+    assert [l.texte for l in extract_docx(data)] == ["un vers inventé"]
+
+
+def test_la_resolution_des_styles_est_memoisee_par_style_et_attribut(monkeypatch):
+    from docx.styles.styles import Styles
+    appels = []
+    original = Styles.get_by_id
+    monkeypatch.setattr(Styles, "get_by_id", lambda self, *a, **k: appels.append(a) or original(self, *a, **k))
+    lignes = extract_docx(docx_bytes(["vers inventé"] * 2000, style_gras=True))
+    assert len(lignes) == 2000 and all(l.gras for l in lignes)
+    assert len(appels) < 40  # une résolution par style et par attribut, pas une par run

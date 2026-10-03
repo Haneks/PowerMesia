@@ -17,10 +17,12 @@ def analyser_fichier(nom_fichier: str, data: bytes) -> ParseResult:
     nom = nom_fichier.lower()
     if len(data) > TAILLE_MAX:
         raise UnsupportedFile(f"Fichier trop gros (plus de {TAILLE_MAX // (1024 * 1024)} Mo)")
-    if nom.endswith(".docx"):
-        lignes = extract_docx(data)
-    elif nom.endswith(".pdf"):
-        lignes = extract_pdf(data)
-    else:
+    if not nom.endswith((".docx", ".pdf")):
         raise UnsupportedFile("Format non géré : seuls les fichiers .docx et .pdf sont acceptés")
-    return parse_lines(lignes, nom_fichier)
+    try:
+        lignes = extract_docx(data) if nom.endswith(".docx") else extract_pdf(data)
+        return parse_lines(lignes, nom_fichier)
+    except UnsupportedFile:
+        raise
+    except Exception as e:  # filet de dernier recours : un fichier ne doit jamais faire planter l'écran d'import
+        raise UnsupportedFile("Fichier illisible") from e

@@ -54,3 +54,13 @@ def test_fichiers_refuses(nom, data, raison):
     with pytest.raises(UnsupportedFile) as erreur:
         analyser_fichier(nom, data)
     assert raison in erreur.value.raison
+
+
+def test_une_exception_inattendue_de_l_analyse_devient_un_fichier_illisible(monkeypatch):
+    def plante(*_):
+        raise RuntimeError("bogue inattendu")
+    monkeypatch.setattr("tools.import_chants.importer.parse_lines", plante)
+    with pytest.raises(UnsupportedFile) as erreur:
+        analyser_fichier("feuille.docx", docx_bytes(FEUILLE_WORD))
+    assert erreur.value.raison == "Fichier illisible"
+    assert isinstance(erreur.value.__cause__, RuntimeError)
