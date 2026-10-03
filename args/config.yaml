@@ -15,42 +15,27 @@ aelf:
   zone_default: "france"
   timeout_seconds: 10
 
-# --- Design des slides (phase Context) ---
+# --- Design des slides ---
+# Texte noir : les fonds doivent rester clairs.
 design:
   background:
-    type: "color"  # color | image
-    # Lectures et messages : bleu nuit
-    color: "#0a1628"
-    # Chants : vert très sombre (différencié)
-    color_chant: "#0d2818"
-    # Messages : optionnel, sinon même que lectures
-    # color_message: "#1a0a28"
+    color: "#FFFFFF"        # lectures et messages
+    color_chant: "#EEF5EE"  # chants (vert très clair, pour les différencier)
   text:
-    color: "#FFFFFF"
     font: "Calibri"
-    size: 34
-    size_min: 24
-  title_rappel:
-    size: 20
-    color: "#CCCCCC"
-  alignment:
-    horizontal: "center"  # left | center | right
-    vertical: "center"    # top | center | bottom
-  # Thème : fond foncé / texte clair OU fond clair / texte foncé
-  theme_colors:
-    dark:
-      background: { color: "#0a1628", color_chant: "#0d2818" }
-      text: "#FFFFFF"
-      title_rappel: "#CCCCCC"
-    light:
-      background: { color: "#f5f5f5", color_chant: "#e8f0e8" }
-      text: "#1a1a1a"
-      title_rappel: "#444444"
+    size: 54
+    color: "#000000"
+  title:
+    font: "Calibri"
+    size: 24
+    color: "#000000"
+    bold: true
 
-# --- Découpage intelligent (hardprompts) ---
+# --- Découpage du texte (tools/slicing.py) ---
 slicing:
-  max_words_per_slide: 50
-  separators_priority: [". ", "; ", ", ", " "]
+  max_chars_per_slide: 150
+  max_lines_per_slide: 6    # lignes affichées (évite le débordement à 54 pt)
+  chars_per_line: 30        # estimation prudente Calibri 54, 16:9
 
 # --- Base de données chants ---
 db:

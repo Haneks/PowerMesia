@@ -1,8 +1,10 @@
 """
 Générateur PowerPoint - python-pptx.
-Format 16:9, fond foncé, texte blanc centré, découpage par volume (50 mots max).
+Format 16:9, texte Calibri 54 noir centré, titre "[Titre] - x/y".
+Le découpage du texte est dans tools/slicing.py.
 """
 
+import html
 import re
 from pathlib import Path
 from typing import Optional
@@ -12,6 +14,8 @@ from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.enum.text import MSO_VERTICAL_ANCHOR, PP_ALIGN
 from pptx.util import Inches, Pt
+
+from tools.slicing import DEFAULT_CHARS_PER_LINE, DEFAULT_MAX_CHARS, split_text_for_slides
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = PROJECT_ROOT / "args" / "config.yaml"
@@ -27,125 +31,40 @@ def _strip_html(text: str) -> str:
     if not text:
         return ""
     text = re.sub(r"<[^>]+>", " ", text)
-    text = re.sub(r"\s+", " ", text)
-    return text.strip()
-
-
-def _word_count(text: str) -> int:
-    """Compte le nombre de mots (séparés par des espaces)."""
-    return len(text.split()) if text else 0
-
-
-def _split_text_by_words(
-    text: str,
-    max_words: int = 50,
-    separators: Optional[list[str]] = None,
-) -> list[str]:
-    """
-    Découpe le texte en blocs de max_words mots maximum.
-    - Priorise : point (.), point-virgule (;), virgule (,)
-    - Ne coupe jamais un mot
-    - Si dépassement sans ponctuation : coupe à la fin du dernier mot complet.
-    """
-    if not text or not text.strip():
-        return []
-
-    text = text.strip()
-    config = _load_config()
-    slicing = config.get("slicing", {})
-    max_words = slicing.get("max_words_per_slide", 50)
-    seps = separators or slicing.get("separators_priority", [". ", "; ", ", ", " "])
-
-    # Normaliser les sauts de ligne
-    text = re.sub(r"[\r\n]+", " ", text)
-    text = re.sub(r"\s+", " ", text).strip()
-
-    chunks: list[str] = []
-    remaining = text
-
-    while remaining.strip():
-        remaining = remaining.strip()
-        words = remaining.split()
-        if len(words) <= max_words:
-            chunks.append(remaining)
-            break
-
-        # Fenêtre = les max_words premiers mots (coupure avant le mot max_words+1)
-        window = " ".join(words[:max_words])
-        cut_pos = -1
-
-        # Priorité : point > point-virgule > virgule > espace (coupure à la limite des mots)
-        for sep in seps:
-            if sep == " ":
-                cut_pos = len(window)
-                break
-            idx = window.rfind(sep)
-            if idx >= 0:
-                cut_pos = idx + len(sep)
-                break
-
-        if cut_pos <= 0:
-            cut_pos = len(window)
-
-        # Ne jamais découper avant une ouverture ou fermeture de guillemets "
-        rest = remaining[cut_pos:]
-        next_part = rest.lstrip()
-        if next_part.startswith('"'):
-            close_idx = next_part.find('"', 1)
-            if close_idx >= 0:
-                # Inclure l'ouverture, le contenu et la fermeture dans le chunk actuel
-                chars_to_add = (len(rest) - len(next_part)) + close_idx + 1
-                cut_pos += chars_to_add
-            else:
-                # Guillemet non fermé : étendre jusqu'au prochain séparateur
-                for sep in seps:
-                    if sep != " ":
-                        idx = next_part.find(sep, 1)
-                        if idx >= 0:
-                            cut_pos += (len(rest) - len(next_part)) + idx + len(sep)
-                            break
-                else:
-                    cut_pos = len(remaining)
-
-        chunk = remaining[:cut_pos].strip()
-        remaining = remaining[cut_pos:].strip()
-
-        if chunk:
-            chunks.append(chunk)
-
-    return chunks
+    text = html.unescape(text)
+    text = re.sub(r"[ \t\r\n\f\v]+", " ", text)  # l'espace insécable est conservée
+    return text.strip(" ")
 
 
 def _get_slide_dimensions(config: dict) -> tuple[float, float]:
     """Retourne (width, height) en inches selon aspect_ratio."""
-    pres = config.get("presentation", {})
-    ratio = pres.get("aspect_ratio", "16:9")
+    ratio = config.get("presentation", {}).get("aspect_ratio", "16:9")
     if ratio == "16:9":
         return 13.333, 7.5
-    return 10.0, 7.5  # 4:3 par défaut
+    return 10.0, 7.5  # 4:3
 
 
-def _get_theme_colors(config: dict, theme: str) -> tuple[str, str, str, str]:
-    """Retourne (bg_lecture, bg_chant, text_color, title_color) pour le thème."""
-    design = config.get("design", {})
-    theme_colors = design.get("theme_colors", {}).get(theme)
-    if theme_colors:
-        bg = theme_colors.get("background", {})
-        return (
-            bg.get("color", "#0a1628"),
-            bg.get("color_chant", "#0d2818"),
-            theme_colors.get("text", "#FFFFFF"),
-            theme_colors.get("title_rappel", "#CCCCCC"),
-        )
-    bg = design.get("background", {})
-    text_cfg = design.get("text", {})
-    title_cfg = design.get("title_rappel", {})
-    return (
-        bg.get("color", "#0a1628"),
-        bg.get("color_chant", "#0d2818"),
-        text_cfg.get("color", "#FFFFFF"),
-        title_cfg.get("color", "#CCCCCC"),
-    )
+def _rgb(hex_color: str) -> RGBColor:
+    return RGBColor.from_string(hex_color.lstrip("#").upper())
+
+
+def _style_run(run, font_cfg: dict, default_size: int, bold: bool = False) -> None:
+    run.font.name = font_cfg.get("font", "Calibri")
+    run.font.size = Pt(font_cfg.get("size", default_size))
+    run.font.color.rgb = _rgb(font_cfg.get("color", "#000000"))
+    run.font.bold = bold
+
+
+def _write_lines(text_frame, text: str, font_cfg: dict, default_size: int, bold: bool = False) -> None:
+    """Un paragraphe par ligne (les chants gardent leurs retours à la ligne)."""
+    for i, line in enumerate(text.split("\n")):
+        p = text_frame.paragraphs[0] if i == 0 else text_frame.add_paragraph()
+        p.alignment = PP_ALIGN.CENTER
+        # Une ligne vide (entre deux couplets) garde la hauteur de la police.
+        p.font.size = Pt(font_cfg.get("size", default_size))
+        if line:
+            _style_run(p.add_run(), font_cfg, default_size, bold)
+            p.runs[0].text = line
 
 
 def _add_slide(
@@ -153,88 +72,47 @@ def _add_slide(
     config: dict,
     title: str,
     body: str,
-    is_continuation: bool = False,
     slide_type: str = "lecture",
-    theme: str = "dark",
 ) -> None:
-    """Ajoute une slide 16:9 avec texte centré. slide_type: 'lecture' | 'chant' | 'message'. theme: 'dark' | 'light'."""
-    blank = prs.slide_layouts[6]
-    slide = prs.slides.add_slide(blank)
+    """Ajoute une slide centrée. slide_type: 'lecture' | 'chant' | 'message'."""
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    design = config.get("design", {})
 
-    bg_lecture, bg_chant, font_color_hex, title_color_hex = _get_theme_colors(config, theme)
-    if slide_type == "chant":
-        bg_color = bg_chant
-    else:
-        bg_color = bg_lecture
-    r = int(bg_color[1:3], 16)
-    g = int(bg_color[3:5], 16)
-    b = int(bg_color[5:7], 16)
-    background = slide.background
-    fill = background.fill
-    fill.solid()
-    fill.fore_color.rgb = RGBColor(r, g, b)
-
-    # Style texte (couleurs selon le thème)
-    text_cfg = config.get("design", {}).get("text", {})
-    font_name = text_cfg.get("font", "Calibri")
-    font_size = text_cfg.get("size", 34)
-    tr = int(font_color_hex[1:3], 16)
-    tg = int(font_color_hex[3:5], 16)
-    tb = int(font_color_hex[5:7], 16)
-
-    title_cfg = config.get("design", {}).get("title_rappel", {})
-    title_size = title_cfg.get("size", 20)
-    tr2 = int(title_color_hex[1:3], 16)
-    tg2 = int(title_color_hex[3:5], 16)
-    tb2 = int(title_color_hex[5:7], 16)
+    bg_cfg = design.get("background", {})
+    bg_color = bg_cfg.get("color_chant" if slide_type == "chant" else "color", "#FFFFFF")
+    slide.background.fill.solid()
+    slide.background.fill.fore_color.rgb = _rgb(bg_color)
 
     width_in, height_in = _get_slide_dimensions(config)
-    margin = 0.6
-
-    # Zone utilisable
+    margin = 0.4
     left = Inches(margin)
-    top = Inches(margin)
     width = Inches(width_in - 2 * margin)
-    height = Inches(height_in - 2 * margin)
 
-    # Titre de rappel (centré)
-    title_height = Inches(0.7)
-    tf = slide.shapes.add_textbox(left, top, width, title_height)
-    tf.text_frame.word_wrap = True
-    p = tf.text_frame.paragraphs[0]
-    p.text = title
-    p.font.size = Pt(title_size)
-    p.font.name = font_name
-    p.font.color.rgb = RGBColor(tr2, tg2, tb2)
-    p.font.bold = True
-    p.alignment = PP_ALIGN.CENTER
+    # Titre : "[Titre] - x/y"
+    title_box = slide.shapes.add_textbox(left, Inches(0.3), width, Inches(0.6))
+    title_box.text_frame.word_wrap = True
+    _write_lines(title_box.text_frame, title, design.get("title", {}), 24, bold=design.get("title", {}).get("bold", True))
 
     # Corps centré (horizontal et vertical)
-    body_top = Inches(margin + 0.8)
-    body_height = Inches(height_in - 2 * margin - 1.0)
-    body_box = slide.shapes.add_textbox(left, body_top, width, body_height)
+    body_box = slide.shapes.add_textbox(left, Inches(1.0), width, Inches(height_in - 1.0 - 0.3))
     body_box.text_frame.word_wrap = True
     body_box.text_frame.vertical_anchor = MSO_VERTICAL_ANCHOR.MIDDLE
-    p = body_box.text_frame.paragraphs[0]
-    p.text = body
-    p.font.size = Pt(font_size)
-    p.font.name = font_name
-    p.font.color.rgb = RGBColor(tr, tg, tb)
-    p.alignment = PP_ALIGN.CENTER
+    _write_lines(body_box.text_frame, body, design.get("text", {}), 54)
 
 
 def generate_pptx(
     blocs: list[dict],
     output_path: Path,
     config_path: Optional[Path] = None,
-    theme: str = "dark",
 ) -> Path:
-    """
-    Génère un fichier PowerPoint à partir d'une liste de blocs.
-    theme: 'dark' (fond foncé, texte clair) ou 'light' (fond clair, texte foncé).
-    """
-    cfg_path = config_path or CONFIG_PATH
-    config = _load_config(cfg_path)
+    """Génère un fichier PowerPoint à partir d'une liste de blocs (lecture, chant, message)."""
+    config = _load_config(config_path or CONFIG_PATH)
+    slicing = config.get("slicing", {})
+    split_kwargs = {
+        "max_chars": slicing.get("max_chars_per_slide", DEFAULT_MAX_CHARS),
+        "max_lines": slicing.get("max_lines_per_slide"),
+        "chars_per_line": slicing.get("chars_per_line", DEFAULT_CHARS_PER_LINE),
+    }
 
     width_in, height_in = _get_slide_dimensions(config)
     prs = Presentation()
@@ -245,43 +123,25 @@ def generate_pptx(
 
     for bloc in blocs:
         t = bloc.get("type", "")
-        label = ""
 
         if t == "lecture":
-            ref = bloc.get("reference", "")
-            intro = bloc.get("intro_lue", "")
-            contenu = _strip_html(bloc.get("contenu", ""))
-            titre_base = intro or ref
-            label = titre_base or "Lecture"
-            chunks = _split_text_by_words(contenu)
-
+            label = bloc.get("intro_lue") or bloc.get("reference") or "Lecture"
+            chunks = split_text_for_slides(_strip_html(bloc.get("contenu", "")), **split_kwargs)
         elif t == "chant":
-            titre = bloc.get("titre", "Chant")
-            paroles = bloc.get("paroles", "")
-            label = titre
-            chunks = _split_text_by_words(paroles)
-
+            label = bloc.get("titre", "Chant")
+            chunks = split_text_for_slides(bloc.get("paroles", ""), mode="chant", **split_kwargs)
         elif t == "message":
-            titre = bloc.get("titre", "Message")
-            contenu = bloc.get("contenu", "")
-            label = titre
-            chunks = _split_text_by_words(contenu)
-
+            label = bloc.get("titre", "Message")
+            chunks = split_text_for_slides(_strip_html(bloc.get("contenu", "")), **split_kwargs)
         else:
             continue
 
-        n = len(chunks)
-        total_slides += n
-        print(f"[pptx] {label} : {n} slide(s) générée(s)", flush=True)
+        y = len(chunks)
+        total_slides += y
+        print(f"[pptx] {label} : {y} slide(s) générée(s)", flush=True)
 
-        for i, chunk in enumerate(chunks):
-            titre_slide = f"{label} (suite)" if i > 0 else label
-            if t == "lecture":
-                _add_slide(prs, config, titre_slide, chunk, is_continuation=(i > 0), slide_type="lecture", theme=theme)
-            elif t == "chant":
-                _add_slide(prs, config, titre_slide, chunk, is_continuation=(i > 0), slide_type="chant", theme=theme)
-            else:
-                _add_slide(prs, config, titre_slide, chunk, is_continuation=(i > 0), slide_type="message", theme=theme)
+        for x, chunk in enumerate(chunks, start=1):
+            _add_slide(prs, config, f"{label} - {x}/{y}", chunk, slide_type=t)
 
     print(f"[pptx] Total : {total_slides} slide(s)", flush=True)
 

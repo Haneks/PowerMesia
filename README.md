@@ -1,14 +1,13 @@
 # ⛪ Générateur de PowerPoint Paroissial
 
-Application web (Streamlit) pour générer des présentations PowerPoint de messes : textes liturgiques (AELF) et chants, avec choix de l’ordre et du thème visuel.
+Application web (Streamlit) pour générer des présentations PowerPoint de messes : textes liturgiques (AELF) et chants, avec choix de l’ordre des blocs.
 
 ## Fonctionnalités
 
 - **Récupération des lectures** : connexion à l’API AELF pour une date donnée (1ère lecture, psaume, 2e lecture, évangile).
 - **Bibliothèque de chants** : base SQLite pour gérer titres, paroles, références et moments liturgiques.
 - **Ordre personnalisable** : réorganisation des blocs (monter/descendre) avant génération.
-- **Thème visuel** : fond foncé / texte clair ou fond clair / texte foncé ; couleurs différenciées pour textes et chants.
-- **Export PPTX** : génération d’un PowerPoint 16:9, découpage intelligent du texte (~50 mots par slide).
+- **Export PPTX** : PowerPoint 16:9, texte Calibri 54 noir sur fond clair, 150 caractères maximum par slide, titre paginé `[Titre] - x/y` (voir `hardprompts/slicing_rules.md`).
 
 ## Prérequis
 
@@ -79,9 +78,8 @@ Pour utiliser des volumes nommés au lieu de dossiers locaux, adapter la section
 Le fichier `args/config.yaml` permet de modifier notamment :
 
 - **Présentation** : format 16:9 ou 4:3
-- **Design** : couleurs de fond (textes / chants), polices, tailles
-- **Thèmes** : palettes `dark` et `light` (fond foncé/clair)
-- **Découpage** : nombre max de mots par slide, séparateurs
+- **Design** : couleurs de fond (textes / chants), police, tailles et couleurs du texte et du titre
+- **Découpage** : nombre maximum de caractères par slide
 - **API AELF** : URL, zone, timeout
 
 ## Licence
