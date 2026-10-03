@@ -16,7 +16,7 @@ def chant(titre="Venez au fleuve", recueil=None, paroles="Chantons au bord du fl
     ("Venez au Fleuve", "venez au fleuve"),
     ("Venez, au fleuve !", "VENEZ AU FLEUVE"),
     ("  Venez   au\nfleuve ", "venez au fleuve"),
-    ("Étoile d'or", "etoile d'or"),
+    ("Étoile d’or", "etoile d'or"),
 ])
 def test_normaliser_ignore_casse_accents_ponctuation_et_espaces(a, b):
     assert normaliser(a) == normaliser(b)
