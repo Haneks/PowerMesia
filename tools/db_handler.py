@@ -8,6 +8,12 @@ from pathlib import Path
 from typing import Optional
 
 from context.models import Chant, MomentLiturgique
+from tools.chant_structure import (
+    ordre_from_json,
+    ordre_to_json,
+    structure_from_json,
+    structure_to_json,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 _DATA_DIR = os.environ.get("DATA_DIR")
@@ -17,6 +23,9 @@ else:
     _DATA_PATH = PROJECT_ROOT / "data"
 DEFAULT_DB = _DATA_PATH / "chants.db"
 SCHEMA_PATH = PROJECT_ROOT / "context" / "chant_schema.sql"
+
+# Version du schéma (PRAGMA user_version). 1 : recueil, structure, ordre, moments sans CHECK.
+SCHEMA_VERSION = 1
 
 
 def _ensure_data_dir(db_path: Path) -> None:
@@ -32,25 +41,84 @@ def _get_connection(db_path: Optional[Path] = None) -> tuple[sqlite3.Connection,
 
 
 def init_db(db_path: Optional[Path] = None) -> None:
-    """Initialise la base de données avec le schéma."""
+    """Initialise la base avec le schéma et migre une base plus ancienne (sans perte)."""
     conn, _ = _get_connection(db_path)
     try:
         with open(SCHEMA_PATH, encoding="utf-8") as f:
             conn.executescript(f.read())
-        conn.commit()
+        _migrate(conn)
     finally:
         conn.close()
 
 
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Met à niveau une base créée avec un schéma plus ancien. Transactionnelle et idempotente."""
+    if conn.execute("PRAGMA user_version").fetchone()[0] >= SCHEMA_VERSION:
+        return
+    try:
+        conn.execute("BEGIN")
+        existing = {r["name"] for r in conn.execute("PRAGMA table_info(chants)")}
+        for column in ("recueil", "structure", "ordre"):
+            if column not in existing:
+                conn.execute(f"ALTER TABLE chants ADD COLUMN {column} TEXT")
+
+        moments_sql = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'chant_moments'"
+        ).fetchone()["sql"]
+        if "CHECK" in moments_sql.upper():
+            # SQLite ne permet pas de retirer une contrainte : on reconstruit la table.
+            conn.execute(
+                """
+                CREATE TABLE chant_moments_new (
+                    chant_id INTEGER NOT NULL,
+                    moment TEXT NOT NULL,
+                    PRIMARY KEY (chant_id, moment),
+                    FOREIGN KEY (chant_id) REFERENCES chants(id) ON DELETE CASCADE
+                )
+                """
+            )
+            conn.execute("INSERT INTO chant_moments_new SELECT chant_id, moment FROM chant_moments")
+            conn.execute("DROP TABLE chant_moments")
+            conn.execute("ALTER TABLE chant_moments_new RENAME TO chant_moments")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_chant_moments_moment ON chant_moments(moment)")
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+
+
+def _row_to_chant(conn: sqlite3.Connection, row: sqlite3.Row) -> Chant:
+    moments_rows = conn.execute(
+        "SELECT moment FROM chant_moments WHERE chant_id = ?", (row["id"],)
+    ).fetchall()
+    return Chant(
+        id=row["id"],
+        titre=row["titre"],
+        paroles=row["paroles"],
+        auteur=row["auteur"],
+        compositeur=row["compositeur"],
+        reference=row["reference"],
+        notes=row["notes"],
+        moments=[MomentLiturgique(r["moment"]) for r in moments_rows],
+        created_at=row["created_at"],
+        updated_at=row["updated_at"],
+        recueil=row["recueil"],
+        structure=structure_from_json(row["structure"]),
+        ordre=ordre_from_json(row["ordre"]),
+    )
+
+
 def create_chant(chant: Chant, db_path: Optional[Path] = None) -> int:
     """Insère un chant et retourne son id."""
+    init_db(db_path)
     conn, _ = _get_connection(db_path)
     try:
-        init_db(db_path)
         cur = conn.execute(
             """
-            INSERT INTO chants (titre, paroles, auteur, compositeur, reference, notes)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO chants (titre, paroles, auteur, compositeur, reference, notes,
+                                recueil, structure, ordre)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 chant.titre,
@@ -59,6 +127,9 @@ def create_chant(chant: Chant, db_path: Optional[Path] = None) -> int:
                 chant.compositeur,
                 chant.reference,
                 chant.notes,
+                chant.recueil,
+                structure_to_json(chant.structure),
+                ordre_to_json(chant.ordre),
             ),
         )
         chant_id = cur.lastrowid
@@ -78,24 +149,7 @@ def get_chant(chant_id: int, db_path: Optional[Path] = None) -> Optional[Chant]:
     conn, _ = _get_connection(db_path)
     try:
         row = conn.execute("SELECT * FROM chants WHERE id = ?", (chant_id,)).fetchone()
-        if not row:
-            return None
-        moments_rows = conn.execute(
-            "SELECT moment FROM chant_moments WHERE chant_id = ?", (chant_id,)
-        ).fetchall()
-        moments = [MomentLiturgique(r["moment"]) for r in moments_rows]
-        return Chant(
-            id=row["id"],
-            titre=row["titre"],
-            paroles=row["paroles"],
-            auteur=row["auteur"],
-            compositeur=row["compositeur"],
-            reference=row["reference"],
-            notes=row["notes"],
-            moments=moments,
-            created_at=row["created_at"],
-            updated_at=row["updated_at"],
-        )
+        return _row_to_chant(conn, row) if row else None
     finally:
         conn.close()
 
@@ -110,7 +164,7 @@ def update_chant(chant: Chant, db_path: Optional[Path] = None) -> bool:
             """
             UPDATE chants
             SET titre=?, paroles=?, auteur=?, compositeur=?, reference=?, notes=?,
-                updated_at = datetime('now')
+                recueil=?, structure=?, ordre=?, updated_at = datetime('now')
             WHERE id = ?
             """,
             (
@@ -120,6 +174,9 @@ def update_chant(chant: Chant, db_path: Optional[Path] = None) -> bool:
                 chant.compositeur,
                 chant.reference,
                 chant.notes,
+                chant.recueil,
+                structure_to_json(chant.structure),
+                ordre_to_json(chant.ordre),
                 chant.id,
             ),
         )
@@ -152,7 +209,7 @@ def search_chants(
     moment: Optional[MomentLiturgique] = None,
     db_path: Optional[Path] = None,
 ) -> list[Chant]:
-    """Recherche des chants par titre/paroles ou par moment."""
+    """Recherche des chants par titre/paroles/référence ou par moment."""
     conn, _ = _get_connection(db_path)
     try:
         sql = """
@@ -171,28 +228,7 @@ def search_chants(
 
         sql += " ORDER BY c.titre"
 
-        rows = conn.execute(sql, params).fetchall()
-        result = []
-        for row in rows:
-            moments_rows = conn.execute(
-                "SELECT moment FROM chant_moments WHERE chant_id = ?", (row["id"],)
-            ).fetchall()
-            moments = [MomentLiturgique(r["moment"]) for r in moments_rows]
-            result.append(
-                Chant(
-                    id=row["id"],
-                    titre=row["titre"],
-                    paroles=row["paroles"],
-                    auteur=row["auteur"],
-                    compositeur=row["compositeur"],
-                    reference=row["reference"],
-                    notes=row["notes"],
-                    moments=moments,
-                    created_at=row["created_at"],
-                    updated_at=row["updated_at"],
-                )
-            )
-        return result
+        return [_row_to_chant(conn, row) for row in conn.execute(sql, params).fetchall()]
     finally:
         conn.close()
 
