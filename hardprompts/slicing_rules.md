@@ -16,3 +16,14 @@
   retours à la ligne conservés, règles de ponctuation non appliquées aux fins de ligne.
 - Le découpage est calculé pour tout le texte (programmation dynamique, coûts dans `slicing.py`),
   ce qui donne le nombre total de slides `y` pour le titre `[Titre] - x/y`.
+
+## Chants structurés (refrain)
+
+- Un chant peut porter une `structure` (sections `refrain` / `couplet` / `pont`) et un `ordre`
+  chanté (`tools/chant_structure.py`).
+- Ordre par défaut (`compute_ordre`) : le refrain est inséré après chaque couplet ou pont ; s'il
+  ouvre le chant, il est aussi joué en premier (`R 1 R 2 R P R`). Plusieurs refrains ou aucun :
+  ordre du document.
+- Les lignes de refrain sont écrites **en gras** ; le découpage (`split_lines_for_slides`) garde le
+  gras de chaque ligne et préfère couper entre deux sections.
+- Un chant sans structure est projeté comme avant (paroles à plat, sans gras).
