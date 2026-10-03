@@ -1,7 +1,8 @@
 # Règles de l'import de chants (tools/import_chants)
 
 Fichiers acceptés : `.docx` et `.pdf` exportés de Word (texte sélectionnable), 10 Mo au plus, lus en
-mémoire. Partitions (police de notation, texte en syllabes) et PDF-images : refusés avec une raison.
+mémoire. Partitions (police de notation, texte en syllabes) et PDF-images : refusés avec une raison, comme un
+.docx de plus de 50 Mo décompressé (5 Mo pour `word/document.xml`, 1000 entrées) ou un PDF de plus de 50 pages.
 
 - **Lignes** : un paragraphe est éclaté aux retours à la ligne et aux doubles espaces (fins de vers) ; une
   ligne est grasse / italique / soulignée si la moitié de ses caractères le sont. PDF : « faux gras »
@@ -17,9 +18,15 @@ mémoire. Partitions (police de notation, texte en syllabes) et PDF-images : ref
   en-tête de feuille.
 - **Consignes** : les consignes entre crochets (`[Procession des enfants]`) sont ignorées avec une note
   « Consigne ignorée ».
-- **Sections** : étiquettes `1.`, `Couplet 2`, `Pont :`, `Refrain` ; sinon un bloc par ligne vide.
+- **Sections** : étiquettes `1.`, `1)`, `Couplet 2`, `Pont :`, `Refrain`, `Refrain :`, `R/`, `Ref.` ; sinon un
+  bloc par ligne vide. Un saut de page commence toujours un nouveau bloc (PDF).
 - **Refrain** : bloc entièrement en gras (à défaut en italique), ou bloc répété ; tout en gras ou rien de
-  marqué : pas de refrain et un avertissement. Psaume : seul le refrain en gras est gardé.
+  marqué : pas de refrain et un avertissement. Un refrain étiqueté (`Refrain :`) puis répété sans étiquette
+  reste ce refrain (jamais un couplet). Psaume : seul le refrain en gras est gardé.
+- **Après le mot-moment d'un en-tête** : les séparateurs de tête (`:`, `–`) sont retirés ; un numéro de
+  psaume (`Psaume 22`, `Psaume 22 (21)`) reste dans le nom et le titre, jamais dans le recueil ; un complément
+  de l'intitulé (`Acclamation de l'Évangile`) n'est pas un recueil ; ce qui suit une virgule ou `:` est des
+  paroles collées.
 - **Ordre chanté** : refrain répété dans le document → ordre du document ; sinon `compute_ordre`.
 - **Titres** : titre explicite (`Title:` ou ligne en majuscules sous tout en-tête de chant, et sous le chant
   seul, sauf quand un `Title:` explicite donne déjà le titre) ; chant seul : nom du fichier ; ordinaire

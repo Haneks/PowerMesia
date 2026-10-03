@@ -243,3 +243,18 @@ def test_la_resolution_des_styles_est_memoisee_par_style_et_attribut(monkeypatch
     lignes = extract_docx(docx_bytes(["vers inventé"] * 2000, style_gras=True))
     assert len(lignes) == 2000 and all(l.gras for l in lignes)
     assert len(appels) < 40  # une résolution par style et par attribut, pas une par run
+
+
+# --- Mineur : le souligné peut être un type de trait ---
+
+def test_souligne_double_ou_pointille_est_souligne_et_aucun_soulignement_ne_l_est_pas():
+    from docx.enum.text import WD_UNDERLINE
+    doc = Document()
+    p = doc.add_paragraph()
+    for texte, valeur in [("double", WD_UNDERLINE.DOUBLE), ("pointille", WD_UNDERLINE.DOTTED),
+                          ("aucun", WD_UNDERLINE.NONE), ("faux", False)]:
+        run = p.add_run(texte + "\n")
+        run.underline = valeur
+    lignes = extract_docx(_bytes(doc))
+    assert [(l.texte, l.souligne) for l in lignes] == [
+        ("double", True), ("pointille", True), ("aucun", False), ("faux", False)]

@@ -105,3 +105,19 @@ def test_pdf_de_51_pages_est_refuse_avant_le_traitement_des_pages():
 
 def test_pdf_de_50_pages_est_lu():
     assert len(extract_pdf(pdf_de_pages(50))) == 50
+
+
+# --- Mineurs : arbre des pages abîmé (erreur MuPDF), et stderr silencieux ---
+
+def test_pdf_a_l_arbre_de_pages_abime_est_refuse_proprement():
+    # MuPDF lève ici une FzErrorBase, qui n'hérite pas de RuntimeError
+    abime = pdf_bytes([{"texte": VERS, "y": 100}]).replace(b"/Kids", b"/Kidz")
+    with pytest.raises(UnsupportedFile) as erreur:
+        extract_pdf(abime)
+    assert erreur.value.raison == "PDF illisible"
+    assert erreur.value.__cause__ is not None
+
+
+def test_les_erreurs_de_mupdf_ne_sont_pas_affichees_dans_la_console():
+    import fitz
+    assert not fitz.TOOLS.mupdf_display_errors()

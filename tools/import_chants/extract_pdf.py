@@ -22,9 +22,8 @@ _COPIES_FAUX_GRAS = 3        # un caractère imprimé 3 fois ou plus est du « f
 _RATIO_LIGNE_VIDE = 1.75     # écart entre deux lignes, en tailles de police, au-delà duquel une ligne vide les sépare
 _PAGES_MAX = 50              # au-delà, ce n'est pas une feuille de chants (refus avant tout traitement de page)
 _ESPACE_ENTRE_MOTS = 0.25    # écart (en tailles de police) à partir duquel on insère une espace
-# Erreurs levées par PyMuPDF en lisant les pages d'un PDF ouvert. Les erreurs de MuPDF (arbre des pages
-# mal formé...) sont des FzErrorBase, qui n'héritent PAS de RuntimeError.
-_ERREURS_DE_LECTURE = (ValueError, RuntimeError, fitz.mupdf.FzErrorBase)
+
+fitz.TOOLS.mupdf_display_errors(False)  # les erreurs de MuPDF deviennent des UnsupportedFile, pas du bruit dans la console
 
 
 @dataclass
@@ -169,7 +168,9 @@ def extract_pdf(data: bytes) -> list[Line]:
             raise UnsupportedFile("PDF trop long pour une feuille de chants")
         _verifier_exploitable(document)
         return _lignes_du_document(document)
-    except _ERREURS_DE_LECTURE as e:
+    except UnsupportedFile:
+        raise
+    except Exception as e:  # ValueError, RuntimeError, erreurs MuPDF (qui n'héritent pas de RuntimeError)...
         raise UnsupportedFile("PDF illisible") from e
     finally:
         document.close()

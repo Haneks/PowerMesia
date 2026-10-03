@@ -159,6 +159,17 @@ mémoire, rien n'est conservé sur le disque. Le HTML et les macros ne sont jama
   feuille.
 - Limites : les tableaux et zones de texte Word ne sont pas lus ; un vers PDF replié sur deux lignes est
   lu comme deux lignes.
+- Limites de lecture : garde de décompression d'un .docx (refusé au-delà de 50 Mo décompressés, de 5 Mo pour
+  `word/document.xml` ou de 1000 entrées) ; un PDF de plus de 50 pages est refusé. Un fichier abîmé donne
+  toujours un refus affichable (`UnsupportedFile`), jamais une exception.
+- Limite connue : un saut de page commence toujours un nouveau bloc (un refrain à cheval sur deux pages est coupé).
+- Après le mot-moment d'un en-tête : les séparateurs de tête (`:`, `–`) sont retirés ; un numéro de psaume
+  (`Psaume 22`, `Psaume 22 (21)`) fait partie du nom et du titre, jamais d'un recueil ; un complément de
+  l'intitulé (`Acclamation de l'Évangile`) n'est pas un recueil ; un texte précédé d'une virgule ou de `:` est des
+  paroles collées, précédé d'un tiret un recueil.
+- Un refrain étiqueté puis répété sans étiquette (ou sans gras) reste ce refrain : tout bloc au texte d'un refrain
+  est une répétition. Un renvoi est une ligne en majuscules commençant par `VOIR`, ou `voir (le) chant / psaume` ;
+  un vers « Voir ta lumière… » est conservé. Les apostrophes typographiques valent l'apostrophe droite.
 - Limite connue : un psaume dont le refrain est écrit sur la ligne d'en-tête, quand toute la ligne est en
   gras et soulignée, est signalé « rien à importer » (le refrain y est indiscernable d'un recueil). Le cas
   courant (refrain en gras dans le corps du psaume) est géré.
@@ -216,4 +227,4 @@ Dépendances ajoutées : `python-docx`, `PyMuPDF`. Pas de modèle, pas de servic
 - Un fichier sans aucune mise en forme est découpé grossièrement : correction à l'écran de vérification.
 - La détection du soulignement et du faux gras en PDF est heuristique : couverte par des tests et par le test corpus.
 - Les fautes de frappe des feuilles sont conservées.
-- `PyMuPDF` est sous licence AGPL ; sans objet pour un usage paroissial, à revoir si l'application est redistribuée.
+- `PyMuPDF` est sous licence AGPL ; sans objet pour un usage paroissial, à revoir en cas d'usage en réseau par des tiers ou de redistribution (image Docker publiée, application donnée à une autre paroisse).

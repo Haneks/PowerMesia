@@ -39,11 +39,15 @@ def test_aucun_fichier_ne_fait_planter_l_analyse(chemin):
     try:
         resultat = analyser_fichier(chemin.name, chemin.read_bytes())
     except UnsupportedFile:
-        assert chemin.suffix.lower() == ".pdf", "un fichier Word ne doit jamais être refusé"
+        est_un_pdf = chemin.suffix.lower() == ".pdf"
+        assert est_un_pdf, chemin.name  # un fichier Word ne doit jamais être refusé
         return
+    # Les messages se limitent au nom du fichier : aucune parole du corpus ne doit apparaître dans un rapport d'échec
     for chant in resultat.chants:
-        assert chant.titre.strip() and chant.structure
-        assert set(chant.ordre) <= {s.id for s in chant.structure}
+        complet = bool(chant.titre.strip() and chant.structure)
+        assert complet, chemin.name
+        ordre_valide = set(chant.ordre) <= {s.id for s in chant.structure}
+        assert ordre_valide, chemin.name
 
 
 @corpus_local
