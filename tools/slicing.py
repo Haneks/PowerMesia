@@ -62,12 +62,30 @@ class _Token:
     quote_open: int = -1    # index du token qui a ouvert la citation en cours
 
 
-def _normalize(text: str, mode: Mode) -> str:
+def clean_spaces(text: str, keep_newlines: bool = False) -> str:
+    """
+    Ramène chaque suite d'espaces (y compris insécables) à une seule espace.
+    Seule une espace insécable collée à la ponctuation française est conservée :
+    avant ! ? : ; » et après «. Le HTML d'AELF met aussi des suites d'&nbsp; entre les
+    versets : elles deviennent une espace simple.
+    keep_newlines : conserve les retours à la ligne (une ligne vide au plus), pour les chants.
+    """
     text = text.replace("\r\n", "\n").replace("\r", "\n")
-    if mode == "text":
-        return re.sub(r"[ \t\n\f\v]+", " ", text).strip()
-    lines = [re.sub(r"[ \t\f\v]+", " ", line).strip() for line in text.split("\n")]
-    return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip("\n")
+    if keep_newlines:
+        lines = [clean_spaces(line) for line in text.split("\n")]
+        return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip("\n")
+
+    def collapse(m: re.Match) -> str:
+        after = text[m.end():m.end() + 1]
+        before = text[m.start() - 1:m.start()] if m.start() else ""
+        glued = (after and after in "!?:;»") or (before and before == "«")
+        return "\xa0" if glued and any(c in "\xa0 " for c in m.group()) else " "
+
+    return re.sub(r"\s+", collapse, text).strip()
+
+
+def _normalize(text: str, mode: Mode) -> str:
+    return clean_spaces(text, keep_newlines=(mode == "chant"))
 
 
 def _update_quotes(stack: list[str], token_text: str) -> None:

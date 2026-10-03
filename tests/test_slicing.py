@@ -232,3 +232,34 @@ def test_tokens_never_overlap_when_opening_quote_precedes_lone_punctuation():
     s = _normalize("Il dit « . puis il partit.", "text")
     tokens = _tokenize(s, "text")
     assert all(a.end <= b.start for a, b in zip(tokens, tokens[1:]))
+
+
+# --- Nettoyage des espaces (HTML AELF : séparateurs de versets en &nbsp;) ---
+
+from tools.slicing import clean_spaces  # noqa: E402
+
+
+@pytest.mark.parametrize("raw, expected", [
+    ("Frères, \xa0\xa0 \xa0ne soyez inquiets", "Frères, ne soyez inquiets"),
+    ("\xa0Il en retourna la terre\xa0", "Il en retourna la terre"),
+    ("ma vigne\xa0!", "ma vigne\xa0!"),
+    ("ce que je ferai\xa0: enlever", "ce que je ferai\xa0: enlever"),
+    ("«\xa0Écoutez cette parabole\xa0: Un homme", "«\xa0Écoutez cette parabole\xa0: Un homme"),
+    ("périr misérablement.\xa0» \xa0\xa0 \xa0Jésus", "périr misérablement.\xa0» Jésus"),
+    ("Ps  79 (80),\xa09-12,\xa013-14", "Ps 79 (80), 9-12, 13-14"),
+    ("a \xa0 b\n\n c", "a b c"),
+    ("mot \xa0:", "mot\xa0:"),
+])
+def test_clean_spaces(raw, expected):
+    assert clean_spaces(raw) == expected
+
+
+def test_clean_spaces_keeps_newlines_when_asked():
+    assert clean_spaces("a  b \xa0 \nc\xa0\xa0d\n\n\n\ne", keep_newlines=True) == "a b\nc d\n\ne"
+
+
+def test_chunks_have_no_double_or_edge_spaces():
+    text = "Frères, \xa0\xa0 \xa0ne soyez inquiets de rien\xa0! \xa0\xa0 \xa0Et la paix de Dieu gardera vos cœurs. " * 6
+    for chunk in split_text_for_slides(text):
+        assert chunk == chunk.strip()
+        assert not re.search(r"[ \xa0 ]{2,}", chunk), repr(chunk)
