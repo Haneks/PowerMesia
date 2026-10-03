@@ -2,6 +2,7 @@
 Gestion de la bibliothèque de chants - SQLite.
 """
 
+import logging
 import os
 import sqlite3
 from pathlib import Path
@@ -14,6 +15,8 @@ from tools.chant_structure import (
     structure_from_json,
     structure_to_json,
 )
+
+logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 _DATA_DIR = os.environ.get("DATA_DIR")
@@ -52,11 +55,21 @@ def init_db(db_path: Optional[Path] = None) -> None:
 
 
 def _migrate(conn: sqlite3.Connection) -> None:
-    """Met à niveau une base créée avec un schéma plus ancien. Transactionnelle et idempotente."""
+    """Met à niveau une base créée avec un schéma plus ancien. Transactionnelle et idempotente.
+
+    Chemin rapide sans verrou si la base est déjà à jour (à chaque rerun Streamlit). Sinon,
+    BEGIN IMMEDIATE prend le verrou d'écriture d'emblée : deux sessions qui démarrent en même
+    temps ne se bloquent plus (« database is locked »), la seconde attend puis constate que la
+    migration est faite.
+    """
     if conn.execute("PRAGMA user_version").fetchone()[0] >= SCHEMA_VERSION:
         return
     try:
-        conn.execute("BEGIN")
+        conn.execute("BEGIN IMMEDIATE")
+        if conn.execute("PRAGMA user_version").fetchone()[0] >= SCHEMA_VERSION:
+            # Une autre session a migré entre-temps.
+            conn.rollback()
+            return
         existing = {r["name"] for r in conn.execute("PRAGMA table_info(chants)")}
         for column in ("recueil", "structure", "ordre"):
             if column not in existing:
@@ -81,17 +94,37 @@ def _migrate(conn: sqlite3.Connection) -> None:
             conn.execute("DROP TABLE chant_moments")
             conn.execute("ALTER TABLE chant_moments_new RENAME TO chant_moments")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_chant_moments_moment ON chant_moments(moment)")
+        # Le tampon de version fait partie de la transaction : tout ou rien.
+        conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
         conn.commit()
     except Exception:
         conn.rollback()
         raise
-    conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
 
 
 def _row_to_chant(conn: sqlite3.Connection, row: sqlite3.Row) -> Chant:
-    moments_rows = conn.execute(
-        "SELECT moment FROM chant_moments WHERE chant_id = ?", (row["id"],)
-    ).fetchall()
+    """Construit un Chant depuis une ligne SQLite, en tolérant les données illisibles.
+
+    Une structure corrompue ou un moment inconnu ne doivent pas faire échouer la lecture de
+    toute la bibliothèque : la structure illisible est ignorée (le chant se comporte alors
+    comme un chant sans structure) et les moments inconnus sont écartés. Les analyseurs de
+    tools.chant_structure restent stricts ; la tolérance se situe ici, à la frontière.
+    """
+    try:
+        structure = structure_from_json(row["structure"])
+        ordre = ordre_from_json(row["ordre"])
+    except (ValueError, KeyError, TypeError) as e:
+        logger.warning("Chant %s : structure illisible, ignorée (%s)", row["id"], e)
+        structure, ordre = [], []
+
+    known = {m.value for m in MomentLiturgique}
+    moments = []
+    for r in conn.execute("SELECT moment FROM chant_moments WHERE chant_id = ?", (row["id"],)):
+        if r["moment"] in known:
+            moments.append(MomentLiturgique(r["moment"]))
+        else:
+            logger.warning("Chant %s : moment inconnu %r, ignoré", row["id"], r["moment"])
+
     return Chant(
         id=row["id"],
         titre=row["titre"],
@@ -100,12 +133,12 @@ def _row_to_chant(conn: sqlite3.Connection, row: sqlite3.Row) -> Chant:
         compositeur=row["compositeur"],
         reference=row["reference"],
         notes=row["notes"],
-        moments=[MomentLiturgique(r["moment"]) for r in moments_rows],
+        moments=moments,
         created_at=row["created_at"],
         updated_at=row["updated_at"],
         recueil=row["recueil"],
-        structure=structure_from_json(row["structure"]),
-        ordre=ordre_from_json(row["ordre"]),
+        structure=structure,
+        ordre=ordre,
     )
 
 

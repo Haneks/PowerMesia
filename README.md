@@ -5,7 +5,7 @@ Application web (Streamlit) pour générer des présentations PowerPoint de mess
 ## Fonctionnalités
 
 - **Récupération des lectures** : connexion à l’API AELF pour une date donnée (1ère lecture, psaume, 2e lecture, évangile).
-- **Bibliothèque de chants** : base SQLite pour gérer titres, paroles, références, recueil, moments liturgiques et structure (refrain, couplets, pont). Le refrain est écrit en gras dans le PowerPoint et répété après chaque couplet.
+- **Bibliothèque de chants** : base SQLite pour gérer titres, paroles, références, recueil, moments liturgiques et structure (refrain, couplets, pont). La structure est renseignée par l’import de chants (bientôt disponible) ; le refrain est alors écrit en gras dans le PowerPoint et, lorsque le chant n’a qu’un seul refrain, répété après chaque couplet.
 - **Ordre personnalisable** : réorganisation des blocs (monter/descendre) avant génération.
 - **Export PPTX** : PowerPoint 16:9, texte Calibri 54 noir sur fond clair, 150 caractères maximum par slide, titre paginé `[Titre] - x/y` (voir `hardprompts/slicing_rules.md`).
 

@@ -4,5 +4,7 @@ import os
 import tempfile
 
 # Avant tout import de tools.db_handler / app, qui lisent ces variables à l'import.
-os.environ.setdefault("DATA_DIR", tempfile.mkdtemp(prefix="powermesia-data-"))
-os.environ.setdefault("OUTPUT_DIR", tempfile.mkdtemp(prefix="powermesia-out-"))
+# Affectation directe (pas setdefault) : une variable déjà exportée dans le shell ne doit
+# jamais faire pointer les tests vers une vraie bibliothèque.
+os.environ["DATA_DIR"] = tempfile.mkdtemp(prefix="powermesia-data-")
+os.environ["OUTPUT_DIR"] = tempfile.mkdtemp(prefix="powermesia-out-")

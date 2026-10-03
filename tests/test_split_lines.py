@@ -2,8 +2,8 @@
 
 from tools.slicing import split_lines_for_slides, split_text_for_slides
 
-REFRAIN = [("Gloire à Dieu, au plus haut des cieux,", True), ("Paix sur la terre aux hommes qu'il aime !", True)]
-COUPLET = [("Nous te louons, nous te bénissons,", False), ("Nous t'adorons, nous te glorifions,", False)]
+REFRAIN = [("Dans le village, la lanterne brille,", True), ("Le vent du soir chante sur l'eau claire !", True)]
+COUPLET = [("Les enfants courent vers le pont,", False), ("Les barques glissent sur le quai,", False)]
 SEP = ("", False)
 
 

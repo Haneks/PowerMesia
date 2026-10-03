@@ -1,12 +1,17 @@
 """Tests de la bibliothèque de chants (tools/db_handler.py)."""
 
+import logging
 import sqlite3
+import threading
+import time
 
 import pytest
 
 from context.models import Chant, MomentLiturgique, SectionChant, TypeSection
 from tools.db_handler import (
     SCHEMA_VERSION,
+    _get_connection,
+    _migrate,
     create_chant,
     get_chant,
     init_db,
@@ -42,12 +47,12 @@ def db(tmp_path):
 
 def _structured_chant() -> Chant:
     return Chant(
-        titre="Gloire à Dieu",
+        titre="Chant du fleuve",
         paroles="refrain\n\ncouplet",
         recueil="Lyon centre 4",
         structure=[
-            SectionChant("R", TypeSection.REFRAIN, ["Gloire à Dieu"]),
-            SectionChant("1", TypeSection.COUPLET, ["Nous te louons"]),
+            SectionChant("R", TypeSection.REFRAIN, ["Chant du fleuve"]),
+            SectionChant("1", TypeSection.COUPLET, ["Le vent du soir"]),
         ],
         ordre=["R", "1", "R"],
         moments=[MomentLiturgique.GLOIRE],
@@ -81,7 +86,7 @@ def test_chant_without_structure_still_works(db):
 
 def test_search_returns_structure(db):
     create_chant(_structured_chant(), db)
-    [found] = search_chants(query="Gloire", db_path=db)
+    [found] = search_chants(query="fleuve", db_path=db)
     assert found.ordre == ["R", "1", "R"] and found.recueil == "Lyon centre 4"
 
 
@@ -138,3 +143,126 @@ def test_init_db_is_idempotent(db):
     init_db(db)
     init_db(db)
     assert get_chant(chant_id, db).ordre == ["R", "1", "R"]
+
+
+# --- Lecture tolérante : une ligne illisible ne doit pas casser toute la bibliothèque ---
+
+
+def _corrupt(db, chant_id, structure, ordre):
+    """Abîme directement la ligne en base (hors de db_handler) et ajoute un moment inconnu."""
+    conn = sqlite3.connect(db)
+    try:
+        conn.execute("UPDATE chants SET structure = ?, ordre = ? WHERE id = ?", (structure, ordre, chant_id))
+        conn.execute("INSERT INTO chant_moments VALUES (?, 'moment_inconnu')", (chant_id,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize(
+    "structure, ordre",
+    [
+        ('{"sections": [', "pas du json"),
+        ('{"sections": [{"id": "R", "type": "inconnu", "lignes": []}]}', '["R"]'),
+    ],
+    ids=["json-illisible", "type-de-section-inconnu"],
+)
+def test_corrupted_row_is_read_as_unstructured_chant(db, caplog, structure, ordre):
+    original = _structured_chant()
+    chant_id = create_chant(original, db)
+    _corrupt(db, chant_id, structure, ordre)
+
+    with caplog.at_level(logging.WARNING, logger="tools.db_handler"):
+        [found] = search_chants(db_path=db)
+        direct = get_chant(chant_id, db)
+
+    for chant in (found, direct):
+        assert chant.structure == [] and chant.ordre == []
+        assert chant.titre == original.titre and chant.paroles == original.paroles
+        assert chant.moments == [MomentLiturgique.GLOIRE]
+    assert "structure illisible" in caplog.text
+    assert "moment_inconnu" in caplog.text
+
+
+def test_concurrent_first_start_on_old_database_migrates_once(tmp_path):
+    """Plusieurs sessions qui démarrent en même temps sur une ancienne base ne doivent pas échouer."""
+    threads_count = 8
+    for essai in range(5):
+        db = tmp_path / f"ancienne-{essai}.db"
+        conn = sqlite3.connect(db)
+        conn.executescript(OLD_SCHEMA)
+        conn.execute("INSERT INTO chants (titre, paroles) VALUES ('Ancien', 'paroles')")
+        conn.execute("INSERT INTO chant_moments VALUES (1, 'entree')")
+        conn.commit()
+        conn.close()
+
+        barrier = threading.Barrier(threads_count)
+        errors = []
+
+        def demarrer():
+            try:
+                barrier.wait()
+                init_db(db)
+            except Exception as e:  # noqa: BLE001 - on veut toutes les erreurs, quelles qu'elles soient
+                errors.append(e)
+
+        threads = [threading.Thread(target=demarrer) for _ in range(threads_count)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert errors == []
+        assert _user_version(db) == SCHEMA_VERSION
+        assert get_chant(1, db).moments == [MomentLiturgique.ENTREE]
+
+
+class _CommitLent:
+    """Connexion dont le commit traîne : la migration reste en cours (verrou d'écriture tenu)."""
+
+    def __init__(self, conn, avant_commit):
+        self._conn = conn
+        self._avant_commit = avant_commit
+
+    def __getattr__(self, nom):
+        return getattr(self._conn, nom)
+
+    def commit(self):
+        self._avant_commit.set()
+        time.sleep(0.5)
+        self._conn.commit()
+
+
+def test_second_session_waits_for_running_migration_instead_of_failing(db):
+    """Une session qui arrive pendant la migration d'une autre attend, puis constate qu'elle est faite."""
+    conn = sqlite3.connect(db)
+    conn.executescript(OLD_SCHEMA)
+    conn.execute("INSERT INTO chants (titre, paroles) VALUES ('Ancien', 'paroles')")
+    conn.execute("INSERT INTO chant_moments VALUES (1, 'entree')")
+    conn.commit()
+    conn.close()
+
+    migration_en_cours = threading.Event()
+    errors = []
+
+    def session(lente):
+        try:
+            c, _ = _get_connection(db)
+            try:
+                _migrate(_CommitLent(c, migration_en_cours) if lente else c)
+            finally:
+                c.close()
+        except Exception as e:  # noqa: BLE001 - on veut toutes les erreurs, quelles qu'elles soient
+            errors.append(e)
+
+    premiere = threading.Thread(target=session, args=(True,))
+    premiere.start()
+    assert migration_en_cours.wait(timeout=5)
+    seconde = threading.Thread(target=session, args=(False,))
+    seconde.start()
+    premiere.join()
+    seconde.join()
+
+    assert errors == []
+    assert _user_version(db) == SCHEMA_VERSION
+    assert get_chant(1, db).moments == [MomentLiturgique.ENTREE]
