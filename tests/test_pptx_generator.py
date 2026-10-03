@@ -122,3 +122,57 @@ def test_aelf_verse_separators_do_not_leave_multiple_spaces(tmp_path):
         assert body == body.strip()
         assert not re.search(r"[ \xa0 ]{2,}", body + title), repr(body)
     assert body == "Frères, ne soyez inquiets de rien\xa0! Et la paix de Dieu gardera vos cœurs."
+
+
+# --- Chants structurés : refrain en gras, ordre chanté ---
+
+SECTIONS = [
+    {"id": "R", "type": "refrain", "lignes": ["La lanterne brille au village", "Chant de la rivière"]},
+    {"id": "1", "type": "couplet", "lignes": ["Le vent du soir", "L’eau s’endort"]},
+    {"id": "2", "type": "couplet", "lignes": ["Le vieux pont", "Rive claire"]},
+]
+
+
+def _body_lines(path):
+    """Toutes les lignes (texte, gras) du corps des slides, dans l'ordre, lignes vides exclues."""
+    lines = []
+    for slide in Presentation(str(path)).slides:
+        body = [sh for sh in slide.shapes if sh.has_text_frame][1]
+        for p in body.text_frame.paragraphs:
+            if p.runs:
+                assert len({r.font.bold for r in p.runs}) == 1
+                lines.append((p.text, p.runs[0].font.bold))
+    return lines
+
+
+def _expected(order):
+    by_id = {s["id"]: s for s in SECTIONS}
+    return [(ligne, sid == "R") for sid in order for ligne in by_id[sid]["lignes"]]
+
+
+def test_structured_chant_repeats_bold_refrain_after_each_couplet(tmp_path):
+    out = tmp_path / "c.pptx"
+    generate_pptx([{"type": "chant", "titre": "Fleuve", "paroles": "inutile", "structure": SECTIONS}], out)
+    assert _body_lines(out) == _expected(["R", "1", "R", "2", "R"])
+
+
+def test_structured_chant_follows_explicit_order(tmp_path):
+    out = tmp_path / "c.pptx"
+    bloc = {"type": "chant", "titre": "Fleuve", "paroles": "", "structure": SECTIONS, "ordre": ["1", "R"]}
+    generate_pptx([bloc], out)
+    assert _body_lines(out) == _expected(["1", "R"])
+
+
+def test_structured_chant_title_is_paginated(tmp_path):
+    out = tmp_path / "c.pptx"
+    generate_pptx([{"type": "chant", "titre": "Fleuve", "paroles": "inutile", "structure": SECTIONS}], out)
+    titles = [[sh for sh in s.shapes if sh.has_text_frame][0].text_frame.text for s in Presentation(str(out)).slides]
+    y = len(titles)
+    assert y >= 1
+    assert titles == [f"Fleuve - {x}/{y}" for x in range(1, y + 1)]
+
+
+def test_chant_without_structure_is_unchanged_and_not_bold(tmp_path):
+    out = tmp_path / "c.pptx"
+    generate_pptx([{"type": "chant", "titre": "Simple", "paroles": "Premier vers\nSecond vers"}], out)
+    assert _body_lines(out) == [("Premier vers", False), ("Second vers", False)]

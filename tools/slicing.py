@@ -25,7 +25,7 @@ COST_PLAIN_IN_QUOTE = 40
 COST_DANGLING_WORD = 25  # mot-outil (de, la, et...) en fin de slide
 COST_CLAUSE_START = -12  # coupure juste avant une conjonction / un relatif
 COST_VIOLATION = 1000    # règle du cahier des charges violée (dernier recours)
-COST_LINE_END = 5        # chants : fin de ligne
+COST_LINE_END = 25       # chants : fin de ligne (moins bon qu'une ligne vide entre couplets)
 COST_MID_LINE = 40       # chants : coupure au milieu d'une ligne
 
 MIN_QUOTE_WORDS = 3  # mots de citation requis avant une coupure interne
@@ -280,3 +280,52 @@ def split_text_for_slides(
         j = i
     chunks.reverse()
     return chunks
+
+
+def split_lines_for_slides(
+    lines: list[tuple[str, bool]],
+    max_chars: int = DEFAULT_MAX_CHARS,
+    max_lines: int | None = None,
+    chars_per_line: int = DEFAULT_CHARS_PER_LINE,
+) -> list[list[tuple[str, bool]]]:
+    """
+    Découpe des lignes (texte, gras) en slides, avec les mêmes règles que le mode "chant"
+    de split_text_for_slides. Chaque slide est une liste de (texte, gras) ; ("", False) est
+    une ligne vide. Le gras reste attaché à sa ligne, même si une ligne trop longue est
+    coupée sur plusieurs slides.
+    """
+    flat: list[tuple[str, bool]] = []
+    for text, bold in lines:
+        for part in text.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
+            flat.append((clean_spaces(part), bold))
+
+    chunks = split_text_for_slides(
+        "\n".join(t for t, _ in flat),
+        max_chars,
+        mode="chant",
+        max_lines=max_lines,
+        chars_per_line=chars_per_line,
+    )
+
+    # Chaque ligne d'un slide est un morceau (de ligne entière ou coupée) des lignes d'origine,
+    # dans le même ordre : on les retrouve en avançant dans les lignes non vides.
+    content = [(t, b) for t, b in flat if t]
+    index = pos = 0
+    pages: list[list[tuple[str, bool]]] = []
+    for chunk in chunks:
+        page: list[tuple[str, bool]] = []
+        for part in chunk.split("\n"):
+            if not part:
+                page.append(("", False))
+                continue
+            text, bold = content[index]
+            while text[pos] == " ":
+                pos += 1
+            if not text.startswith(part, pos):
+                raise ValueError(f"Découpage incohérent : {part!r} introuvable dans {text!r}")
+            page.append((part, bold))
+            pos += len(part)
+            if pos >= len(text):
+                index, pos = index + 1, 0
+        pages.append(page)
+    return pages

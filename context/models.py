@@ -16,10 +16,40 @@ from typing import Optional
 class MomentLiturgique(Enum):
     """Moment de la messe où le chant est utilisé."""
     ENTREE = "entree"
+    PARDON = "pardon"
+    GLOIRE = "gloire"
+    PSAUME = "psaume"
+    ALLELUIA = "alleluia"
+    PU = "pu"
     OFFERTOIRE = "offertoire"
+    SANCTUS = "sanctus"
+    ANAMNESE = "anamnese"
+    AGNEAU = "agneau"
     COMMUNION = "communion"
     ENVOI = "envoi"
     AUTRE = "autre"
+
+
+class TypeSection(Enum):
+    """Type d'une section de chant."""
+    REFRAIN = "refrain"
+    COUPLET = "couplet"
+    PONT = "pont"
+
+
+@dataclass
+class SectionChant:
+    """Une section d'un chant : refrain, couplet ou pont."""
+    id: str
+    type: TypeSection
+    lignes: list[str]
+
+    def to_dict(self) -> dict:
+        return {"id": self.id, "type": self.type.value, "lignes": list(self.lignes)}
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "SectionChant":
+        return cls(id=d["id"], type=TypeSection(d["type"]), lignes=list(d.get("lignes", [])))
 
 
 @dataclass
@@ -38,6 +68,9 @@ class Chant:
     notes: Optional[str] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
+    recueil: Optional[str] = None  # Ex: "Lyon centre 4"
+    structure: list[SectionChant] = field(default_factory=list)
+    ordre: list[str] = field(default_factory=list)  # Ex: ["R", "1", "R", "2", "R"]
 
     def to_dict(self) -> dict:
         return {
@@ -51,6 +84,9 @@ class Chant:
             "notes": self.notes,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
+            "recueil": self.recueil,
+            "structure": [s.to_dict() for s in self.structure],
+            "ordre": list(self.ordre),
         }
 
     @classmethod
@@ -70,7 +106,22 @@ class Chant:
             notes=d.get("notes"),
             created_at=d.get("created_at"),
             updated_at=d.get("updated_at"),
+            recueil=d.get("recueil"),
+            structure=[SectionChant.from_dict(s) for s in d.get("structure") or []],
+            ordre=list(d.get("ordre") or []),
         )
+
+    def set_paroles(self, nouvelles_paroles: str) -> bool:
+        """
+        Remplace les paroles. Si le texte change, la structure (refrains) ne correspond
+        plus : elle est supprimée. Retourne True si une structure a été supprimée.
+        """
+        changed = nouvelles_paroles != self.paroles
+        self.paroles = nouvelles_paroles
+        if changed and self.structure:
+            self.structure, self.ordre = [], []
+            return True
+        return False
 
 
 # =============================================================================

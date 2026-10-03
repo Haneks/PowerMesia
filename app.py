@@ -18,6 +18,7 @@ import streamlit as st
 
 from context.models import Chant, MomentLiturgique, TypeLecture
 from tools.aelf_service import get_messe
+from tools.chant_structure import sections_to_dicts
 from tools.db_handler import (
     init_db,
     create_chant,
@@ -155,6 +156,8 @@ if menu == "📅 Générer une messe":
                         "chant_id": c.id,
                         "titre": c.titre,
                         "paroles": c.paroles,
+                        "structure": sections_to_dicts(c.structure),
+                        "ordre_chant": c.ordre,
                     })
                     st.session_state["blocs"] = blocs
                     st.rerun()
@@ -175,6 +178,8 @@ if menu == "📅 Générer une messe":
                                 "type": "chant",
                                 "titre": b.get("titre", ""),
                                 "paroles": b.get("paroles", ""),
+                                "structure": b.get("structure", []),
+                                "ordre": b.get("ordre_chant", []),
                             })
                         elif b.get("type") == "lecture" and "contenu" in b:
                             pptx_blocs.append({
@@ -211,7 +216,7 @@ else:
         q = st.text_input("Recherche (titre, paroles, référence)")
         moment = st.selectbox(
             "Moment liturgique",
-            [None, "entree", "offertoire", "communion", "envoi", "autre"],
+            [None] + [m.value for m in MomentLiturgique],
             format_func=lambda x: "Tous" if x is None else x,
         )
         if st.button("Rechercher"):
@@ -274,11 +279,13 @@ else:
                         )
                         if st.form_submit_button("Modifier"):
                             chant.titre = titre
-                            chant.paroles = paroles
+                            structure_supprimee = chant.set_paroles(paroles)
                             chant.auteur = auteur or None
                             chant.moments = [MomentLiturgique(m) for m in moments]
                             update_chant(chant)
                             st.success("Chant mis à jour.")
+                            if structure_supprimee:
+                                st.info("Les paroles ont changé : la structure (refrains) a été supprimée.")
                     if st.button("🗑️ Supprimer ce chant", key="del_chant"):
                         delete_chant(chant.id)
                         st.success("Chant supprimé.")

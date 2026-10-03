@@ -10,7 +10,9 @@ powerpoint-paroissial/
 │
 ├── tools/                    # Assemble - Outils métier
 │   ├── aelf_service.py       # Client API AELF
+│   ├── chant_structure.py    # Structure d'un chant (refrain, ordre chanté)
 │   ├── pptx_generator.py     # Génération PowerPoint (python-pptx)
+│   ├── slicing.py            # Découpage du texte en slides
 │   └── db_handler.py         # Bibliothèque de chants (SQLite/JSON)
 │
 ├── context/                  # Trace - Schémas et règles
