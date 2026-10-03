@@ -168,7 +168,11 @@ mémoire, rien n'est conservé sur le disque. Le HTML et les macros ne sont jama
   l'intitulé (`Acclamation de l'Évangile`) n'est pas un recueil ; un texte précédé d'une virgule ou de `:` est des
   paroles collées, précédé d'un tiret un recueil.
 - Un refrain étiqueté puis répété sans étiquette (ou sans gras) reste ce refrain : tout bloc au texte d'un refrain
-  est une répétition. Un renvoi est une ligne en majuscules commençant par `VOIR`, ou `voir (le) chant / psaume` ;
+  est une répétition ; un bloc étiqueté dont le texte est celui du refrain est la répétition de ce refrain.
+  Un reste qui commence par un article ou une préposition (de, du, des, le, la, l', à, au…) est lu comme suite de
+  l'intitulé du moment, pas comme recueil. Lecture réelle de l'archive Word : les octets décompressés sont comptés
+  par blocs, sans se fier aux tailles déclarées dans les en-têtes du zip. Un numéro de psaume suivi du recueil
+  (`Psaume 22 – Lyon centre 4`, `Psaume 22 (21) : Lyon centre 4`) reste dans le nom du moment et du titre. Un renvoi est une ligne en majuscules commençant par `VOIR`, ou `voir (le) chant / psaume` ;
   un vers « Voir ta lumière… » est conservé. Les apostrophes typographiques valent l'apostrophe droite.
 - Limite connue : un psaume dont le refrain est écrit sur la ligne d'en-tête, quand toute la ligne est en
   gras et soulignée, est signalé « rien à importer » (le refrain y est indiscernable d'un recueil). Le cas

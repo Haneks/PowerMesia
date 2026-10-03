@@ -1,6 +1,7 @@
 """Fabrique de fichiers Word et PDF pour les tests de l'import (textes inventés, rien du corpus)."""
 
 import io
+import struct
 import zipfile
 
 import fitz
@@ -130,3 +131,37 @@ def pdf_de_pages(nombre: int) -> bytes:
     for _ in range(nombre):
         _ecrire_lignes(document.new_page(), [{"texte": "Le vent du soir se lève sur la ville", "y": 100}])
     return document.tobytes()
+
+
+def docx_taille_declaree_falsifiee(entrees: dict, declaree: int = 1000) -> bytes:
+    """
+    Un .docx dont les entrées `nom -> nombre d'octets nuls réels` déclarent la taille `declaree` dans leurs
+    en-têtes (local et central) : une bombe de décompression que les tailles déclarées ne trahissent pas.
+    """
+    data = bytearray(docx_avec_entrees_en_plus({nom: bytes(taille) for nom, taille in entrees.items()}))
+    with zipfile.ZipFile(io.BytesIO(bytes(data))) as archive:
+        decalages = {i.filename: i.header_offset for i in archive.infolist() if i.filename in entrees}
+    for nom, decalage in decalages.items():
+        data[decalage + 22:decalage + 26] = struct.pack("<I", declaree)  # en-tête local : taille décompressée
+        central = _entree_centrale(data, nom)
+        data[central + 24:central + 28] = struct.pack("<I", declaree)  # répertoire central : taille décompressée
+    return bytes(data)
+
+
+def _entree_centrale(data: bytearray, nom: str) -> int:
+    """Position de l'en-tête du répertoire central de l'entrée `nom`."""
+    position = data.find(b"PK\x01\x02")
+    while position != -1:
+        longueur_nom = struct.unpack("<H", data[position + 28:position + 30])[0]
+        if bytes(data[position + 46:position + 46 + longueur_nom]) == nom.encode():
+            return position
+        position = data.find(b"PK\x01\x02", position + 1)
+    raise AssertionError(nom)
+
+
+def docx_version_d_extraction_corrompue() -> bytes:
+    """Un .docx valide dont une entrée annonce une version de zip trop récente (zipfile lève NotImplementedError)."""
+    data = bytearray(docx_bytes(["un vers inventé"]))
+    central = _entree_centrale(data, "word/document.xml")
+    data[central + 6:central + 8] = struct.pack("<H", 200)  # « version needed to extract » : 20,0
+    return bytes(data)

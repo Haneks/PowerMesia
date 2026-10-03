@@ -1,8 +1,11 @@
 """Extraction d'un fichier Word (.docx) : une liste de Line avec gras / italique / souligné."""
 
+import copy
 import dataclasses
 import io
+import re
 import zipfile
+import zlib
 
 from docx import Document
 from docx.text.paragraph import Paragraph
@@ -80,19 +83,44 @@ def _lignes_du_paragraphe(paragraphe: Paragraph, memo: dict) -> list[Line]:
     return lignes_depuis_caracteres(caracteres)
 
 
+_BLOC = 64 * 1024  # lecture de la décompression par blocs : jamais plus de 64 Ko alloués à la fois
+_PARTIE_DOCUMENT = re.compile(r"word/document[^/]*\.xml")  # word/document.xml, word/document2.xml...
+
+
+def _trop_volumineux() -> UnsupportedFile:
+    return UnsupportedFile("Fichier Word trop volumineux une fois décompressé")
+
+
 def _verifier_taille_decompressee(data: bytes) -> None:
-    """Refuse une archive qui, décompressée, serait énorme (bombe de décompression), avant toute lecture."""
+    """
+    Refuse une archive qui, décompressée, serait énorme (bombe de décompression), avant toute lecture par
+    python-docx. Compte les octets RÉELLEMENT décompressés : les tailles déclarées dans les en-têtes du zip
+    peuvent être falsifiées, et la lecture s'arrête dès qu'un seuil est franchi.
+    """
     try:
-        with zipfile.ZipFile(io.BytesIO(data)) as archive:
-            entrees = archive.infolist()
+        archive = zipfile.ZipFile(io.BytesIO(data))
     except zipfile.BadZipFile as e:
         raise UnsupportedFile("Fichier Word illisible (est-ce bien un .docx ?)") from e
-    if (
-        len(entrees) > ENTREES_MAX
-        or sum(e.file_size for e in entrees) > TAILLE_MAX_DECOMPRESSEE
-        or any(e.filename == "word/document.xml" and e.file_size > TAILLE_MAX_DOCUMENT_XML for e in entrees)
-    ):
-        raise UnsupportedFile("Fichier Word trop volumineux une fois décompressé")
+    with archive:
+        entrees = archive.infolist()
+        if len(entrees) > ENTREES_MAX:
+            raise _trop_volumineux()
+        total = 0
+        try:
+            for entree in entrees:
+                # Taille déclarée écartée : sinon zipfile s'arrête à elle et ne voit pas le reste de la bombe
+                sans_limite = copy.copy(entree)
+                sans_limite.file_size = 1 << 62
+                limite = TAILLE_MAX_DOCUMENT_XML if _PARTIE_DOCUMENT.fullmatch(entree.filename) else None
+                lus = 0
+                with archive.open(sans_limite) as flux:
+                    while bloc := flux.read(_BLOC):
+                        lus += len(bloc)
+                        total += len(bloc)
+                        if total > TAILLE_MAX_DECOMPRESSEE or (limite is not None and lus > limite):
+                            raise _trop_volumineux()
+        except (zipfile.BadZipFile, zlib.error, NotImplementedError) as e:
+            raise UnsupportedFile("Fichier Word illisible") from e
 
 
 def _lire(data: bytes) -> list[Line]:
@@ -125,8 +153,8 @@ def extract_docx(data: bytes) -> list[Line]:
     Un fichier abîmé, trop volumineux une fois décompressé ou d'une structure inattendue est refusé
     (UnsupportedFile), jamais un plantage.
     """
-    _verifier_taille_decompressee(data)
     try:
+        _verifier_taille_decompressee(data)
         return _lire(data)
     except UnsupportedFile:
         raise

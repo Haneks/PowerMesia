@@ -11,7 +11,9 @@ from docx.enum.style import WD_STYLE_TYPE
 from docx.oxml import parse_xml
 from docx.oxml.ns import nsdecls
 
-from tests.helpers_import import docx_avec_entrees_en_plus, docx_bytes, docx_partie_remplacee
+from tests.helpers_import import (
+    docx_avec_entrees_en_plus, docx_bytes, docx_partie_remplacee, docx_taille_declaree_falsifiee,
+    docx_version_d_extraction_corrompue)
 from tools.import_chants.extract_docx import extract_docx
 from tools.import_chants.modeles import UnsupportedFile
 
@@ -258,3 +260,36 @@ def test_souligne_double_ou_pointille_est_souligne_et_aucun_soulignement_ne_l_es
     lignes = extract_docx(_bytes(doc))
     assert [(l.texte, l.souligne) for l in lignes] == [
         ("double", True), ("pointille", True), ("aucun", False), ("faux", False)]
+
+
+# --- Garde de décompression : la taille réelle compte, pas celle que l'archive déclare ---
+
+@pytest.mark.parametrize("entrees", [
+    {"word/document.xml": 100 * MO},
+    {f"word/media/{k}.bin": 5 * MO for k in range(12)},
+], ids=["document_xml_de_100_mo_declare_1000_octets", "somme_de_60_mo_declaree_1000_octets_par_entree"])
+def test_taille_declaree_falsifiee_la_lecture_reelle_est_refusee_sans_allouer_la_bombe(entrees):
+    import tracemalloc
+    data = docx_taille_declaree_falsifiee(entrees)
+    tracemalloc.start()
+    try:
+        with pytest.raises(UnsupportedFile) as erreur:
+            extract_docx(data)
+        pic = tracemalloc.get_traced_memory()[1]
+    finally:
+        tracemalloc.stop()
+    assert erreur.value.raison == "Fichier Word trop volumineux une fois décompressé"
+    assert pic < 30 * MO  # la bombe n'est jamais décompressée en entier
+
+
+@pytest.mark.parametrize("nom", ["word/document2.xml", "word/document.xml"], ids=["document2_xml", "document_xml"])
+def test_toute_partie_document_xml_est_limitee_a_5_mo(nom):
+    with pytest.raises(UnsupportedFile) as erreur:
+        extract_docx(docx_avec_entrees_en_plus({nom: bytes(6 * MO)}))
+    assert erreur.value.raison == "Fichier Word trop volumineux une fois décompressé"
+
+
+def test_version_de_zip_corrompue_donne_unsupported_file_et_non_not_implemented_error():
+    with pytest.raises(UnsupportedFile) as erreur:
+        extract_docx(docx_version_d_extraction_corrompue())
+    assert "Word" in erreur.value.raison

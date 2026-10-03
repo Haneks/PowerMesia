@@ -470,3 +470,25 @@ def test_un_renvoi_reste_ecarte_avec_une_note(renvoi):
     chant = chant_de(L("Un vers inventé"), L(renvoi))
     assert toutes_les_lignes(chant) == ["Un vers inventé"]
     assert chant.notes == [f"Renvoi ignoré : {renvoi}"]
+
+
+# --- C1 (suite) : un numéro de psaume suivi du recueil sur la même ligne ---
+
+@pytest.mark.parametrize("en_tete, recueil, titre", [
+    ("Psaume 22 – Lyon centre 4", "Lyon centre 4", "Psaume 22 – Lyon centre 4"),
+    ("Psaume 22 (21) – Lyon centre 4", "Lyon centre 4", "Psaume 22 (21) – Lyon centre 4"),
+    ("Psaume 22 : Lyon centre 4", "Lyon centre 4", "Psaume 22 – Lyon centre 4"),
+    ("Psaume   22 – Lyon centre 4", "Lyon centre 4", "Psaume 22 – Lyon centre 4"),
+    ("Psaume 22", None, "Psaume 22"),
+    ("Psaume 22 (21)", None, "Psaume 22 (21)"),
+    ("Psaume 22 :", None, "Psaume 22"),
+    ("Psaume", None, "Psaume"),
+], ids=["numero_tiret_recueil", "numero_parentheses_tiret_recueil", "numero_deux_points_recueil",
+        "numero_apres_trois_espaces_tiret_recueil", "numero_seul", "numero_et_parentheses", "numero_deux_points",
+        "psaume_seul"])
+def test_le_numero_d_un_psaume_n_entre_jamais_dans_le_recueil(en_tete, recueil, titre):
+    lignes = [L(en_tete, gras=True, souligne=True), L("Le Seigneur est mon berger", gras=True)]
+    [chant] = parse_lines(lignes, "x.docx").chants
+    assert chant.moment is M.PSAUME
+    assert (chant.recueil, chant.titre) == (recueil, titre)
+    assert toutes_les_lignes(chant) == ["Le Seigneur est mon berger"]

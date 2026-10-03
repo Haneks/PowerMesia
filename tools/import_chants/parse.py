@@ -172,21 +172,37 @@ def _est_un_numero_de_psaume(texte: str) -> bool:
     return bool(_NUMERO_DE_PSAUME.fullmatch(re.sub(r"[()]|[:;,.–—-]", " ", texte).strip()))
 
 
-def _classer_la_suite(suite: str) -> tuple[Optional[str], Optional[str]]:
+def _classer_la_suite(suite: str, deux_points_ok: bool = False) -> tuple[Optional[str], Optional[str]]:
     """
     (recueil, paroles collées) pour ce qui suit le mot-moment ou les 3 espaces. Les séparateurs de tête
     (« : », « – ») sont retirés. Une virgule, un point ou des deux-points avant le texte l'annoncent
-    comme des paroles (« Gloire à Dieu, au plus haut… ») ; un tiret, comme un recueil.
+    comme des paroles (« Gloire à Dieu, au plus haut… ») ; un tiret, comme un recueil. Après un numéro de
+    psaume (`deux_points_ok`), les deux-points introduisent un recueil (« Psaume 22 : Lyon centre 4 »).
     """
     prefixe = _SEPARATEURS_DE_TETE.match(suite)
     texte = suite[prefixe.end():].strip() if prefixe else suite.strip()
     if not texte:
         return None, None
-    if prefixe and re.search(r"[,;.:]", prefixe.group()):
+    if prefixe and re.search(r"[,;.]" if deux_points_ok else r"[,;.:]", prefixe.group()):
         return None, texte
     if _ressemble_a_un_recueil(texte):
         return clean_spaces(texte), None
     return None, texte
+
+
+_NUMERO_DE_TETE = re.compile(r"\s*(\d+[a-z]?(?:\s*\([^)]*\))?)(?!\w)", re.IGNORECASE)
+
+
+def _psaume_avec_numero(nom: str, suite: str) -> Optional[tuple[str, Optional[str], Optional[str]]]:
+    """
+    « Psaume » + « 22 – Lyon centre 4 » : le numéro de tête (et sa parenthèse « (21) ») reste dans le nom
+    du moment, jamais dans le recueil, qui est ce qui suit. None si la suite ne commence pas par un numéro.
+    """
+    numero = _NUMERO_DE_TETE.match(suite)
+    if not numero:
+        return None
+    recueil, collees = _classer_la_suite(suite[numero.end():], deux_points_ok=True)
+    return clean_spaces(f"{nom} {numero.group(1)}"), recueil, collees
 
 
 def _decomposer_entete(texte: str) -> tuple[str, Optional[str], Optional[str]]:
@@ -210,12 +226,16 @@ def _decouper_entete(texte: str) -> tuple[str, Optional[str], Optional[str]]:
         gauche, droite = morceaux[0].strip(), morceaux[1]
         if _moment_en_tete(gauche)[0] is M.PSAUME and _est_un_numero_de_psaume(droite):
             return clean_spaces(f"{gauche} {droite}"), None, None  # « Psaume   22 »
+        if _moment_en_tete(gauche)[0] is M.PSAUME and (avec_numero := _psaume_avec_numero(gauche, droite)):
+            return avec_numero  # « Psaume   22 – Lyon centre 4 »
         recueil, collees = _classer_la_suite(droite)
         return gauche, recueil, collees
     moment, reste = _moment_en_tete(texte)
     if moment is not None and reste.strip():
         if moment is M.PSAUME and _est_un_numero_de_psaume(reste):
             return texte.strip(), None, None  # « Psaume 22 », « Psaume 22 : »
+        if moment is M.PSAUME and (avec_numero := _psaume_avec_numero(texte[: len(texte) - len(reste)], reste)):
+            return avec_numero  # « Psaume 22 – Lyon centre 4 » : le numéro reste dans le nom, le recueil suit
         if _SUITE_DE_L_INTITULE.match(_sans_accents(reste.lstrip())):
             return texte.strip(), None, None  # « Acclamation de l'Évangile » : suite de l'intitulé du moment
         recueil, collees = _classer_la_suite(reste)
