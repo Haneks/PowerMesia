@@ -185,8 +185,9 @@ def _est_metadonnee(entete: _Entete, lignes: list[Line]) -> bool:
 # --- Corps d'un chant : lignes, blocs, sections ---
 
 def _normaliser(lignes: list[Line]) -> tuple[list[Line], list[str]]:
-    """Nettoie les espaces, retire les reprises « 2x », écarte les renvois."""
+    """Nettoie les espaces, retire les reprises « 2x », écarte les renvois et les consignes entre crochets."""
     propres, notes, reprises = [], [], 0
+    coupure_heritee = False  # une consigne écartée séparait deux blocs : la ligne suivante garde la coupure
     for ligne in lignes:
         texte = clean_spaces(ligne.texte)
         if not texte:
@@ -194,11 +195,16 @@ def _normaliser(lignes: list[Line]) -> tuple[list[Line], list[str]]:
         if _RENVOI.match(texte):
             notes.append(f"Renvoi ignoré : {texte}")
             continue
+        if texte.startswith("[") and texte.endswith("]"):  # « [Procession des enfants] »
+            notes.append(f"Consigne ignorée : {texte}")
+            coupure_heritee = coupure_heritee or ligne.vide_avant
+            continue
         sans_reprise = _BIS.sub("", texte).strip()
         if sans_reprise and sans_reprise != texte:
             reprises += 1
             texte = sans_reprise
-        propres.append(dataclasses.replace(ligne, texte=texte))
+        propres.append(dataclasses.replace(ligne, texte=texte, vide_avant=ligne.vide_avant or coupure_heritee))
+        coupure_heritee = False
     if reprises:
         notes.append(f"{reprises} reprise(s) « 2x » retirée(s) du texte")
     return propres, notes
@@ -377,8 +383,9 @@ def _chant(entete: Optional[_Entete], corps: list[Line], nom_fichier: str) -> Op
         if m and m.group(1) and not re.fullmatch(_REPRISE, m.group(1), re.IGNORECASE):
             recueil, corps = clean_spaces(m.group(1)), corps[1:]
 
-    # Titre en majuscules juste sous l'en-tête (ex. « JE N'AI QUE MA PRIÈRE »)
-    if corps and corps[0].gras and clean_spaces(corps[0].texte).isupper() \
+    # Titre en majuscules juste sous l'en-tête (ex. « JE N'AI QUE MA PRIÈRE »), sauf si « Title: » le donne déjà
+    if not (entete is not None and entete.titre_explicite) \
+            and corps and corps[0].gras and clean_spaces(corps[0].texte).isupper() \
             and len(corps[0].texte.split()) <= _MOTS_TITRE_MAJUSCULES \
             and not _PONCTUATION_FINALE.search(corps[0].texte.strip()):
         titre, corps = corps[0].texte, corps[1:]
@@ -436,6 +443,12 @@ def parse_lines(lignes: list[Line], nom_fichier: str = "") -> ParseResult:
     for k, entete in enumerate(entetes):
         fin = entetes[k + 1].debut if k + 1 < len(entetes) else len(lignes)
         corps = lignes[entete.fin:fin]
+        if _est_metadonnee(entete, lignes):  # en-tête de feuille (date…) en milieu de fichier : pas un chant
+            ignorees = len([l for l in corps if l.texte.strip()])
+            resultat.notes.append(
+                f"Feuille : {clean_spaces(entete.texte)}" + (f" ({ignorees} ligne(s) ignorée(s))" if ignorees else "")
+            )
+            continue
         chant = _chant(entete, corps, nom_fichier)
         if chant:
             resultat.chants.append(chant)
