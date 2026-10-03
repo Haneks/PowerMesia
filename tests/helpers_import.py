@@ -2,6 +2,7 @@
 
 import io
 
+import fitz
 from docx import Document
 from docx.enum.style import WD_STYLE_TYPE
 
@@ -38,3 +39,41 @@ def docx_bytes(paragraphes: list, style_gras: bool = False) -> bytes:
     sortie = io.BytesIO()
     document.save(sortie)
     return sortie.getvalue()
+
+
+def pdf_bytes(lignes: list[dict]) -> bytes:
+    """
+    Un PDF d'une page. Chaque ligne : {"texte", "y", "taille" (12), "gras" (False), "souligne" (False),
+    "copies" (1 : 3 ou plus simule le « faux gras » en imprimant le texte plusieurs fois)}.
+    """
+    document = fitz.open()
+    page = document.new_page()
+    for ligne in lignes:
+        taille = ligne.get("taille", 12)
+        police = "hebo" if ligne.get("gras") else "helv"
+        for copie in range(ligne.get("copies", 1)):
+            page.insert_text((72 + 0.4 * copie, ligne["y"] + 0.3 * copie), ligne["texte"],
+                             fontsize=taille, fontname=police)
+        if ligne.get("souligne"):
+            largeur = fitz.Font(police).text_length(ligne["texte"], fontsize=taille)  # gère les accents
+            page.draw_line((72, ligne["y"] + 2), (72 + largeur, ligne["y"] + 2), width=0.8)
+    return document.tobytes()
+
+
+def pdf_image_seule() -> bytes:
+    """Un PDF dont la seule page est une image (un scan) : aucun texte."""
+    document = fitz.open()
+    page = document.new_page()
+    image = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 20, 20), False)
+    image.clear_with(200)
+    page.insert_image(fitz.Rect(50, 50, 150, 150), pixmap=image)
+    return document.tobytes()
+
+
+def pdf_en_syllabes() -> bytes:
+    """Un PDF dont le texte est découpé en fragments de 1 à 2 caractères, comme sous les notes d'une partition."""
+    document = fitz.open()
+    page = document.new_page()
+    for k in range(150):
+        page.insert_text((20 + (k % 25) * 22, 60 + (k // 25) * 30), ["la", "so", "a"][k % 3], fontsize=10)
+    return document.tobytes()
