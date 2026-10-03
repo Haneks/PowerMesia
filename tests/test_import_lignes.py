@@ -60,3 +60,14 @@ def test_italique_et_les_espaces_ne_comptent_pas_dans_la_proportion():
 def test_texte_vide_ou_blanc_ne_donne_aucune_ligne():
     assert lignes_depuis_caracteres([]) == []
     assert lignes_depuis_caracteres(car("  \n  ")) == []
+
+
+def test_titre_souligne_de_plus_de_six_mots_n_est_pas_coupe_aux_doubles_espaces():
+    texte = "Gloire a Dieu au plus haut  du ciel et sur la terre"
+    lignes = lignes_depuis_caracteres(car(texte, gras=True, souligne=True))
+    assert textes(lignes) == [texte]
+
+
+def test_les_espaces_ne_comptent_pas_dans_la_proportion_d_italique():
+    ligne = lignes_depuis_caracteres(car("ab", italique=True) + car("      ") + car("c"))[0]
+    assert ligne.italique is True  # 2 caractères visibles sur 3 ; avec les espaces : 2 sur 9
