@@ -1535,7 +1535,8 @@ Ajouter à la fin de `hardprompts/import_rules.md` :
   Remplacer ou Ajouter quand même. Même texte mais l'import apporte une structure (refrains) que le chant
   existant n'a pas : « différent » (le remplacement ajoute les refrains en gras).
 - **Remplacer** garde l'identité du chant (id) et les champs saisis à la main (auteur, compositeur,
-  référence, notes) ; titre, recueil, paroles, structure, ordre et moments sont remplacés.
+  référence, notes) ; titre, recueil, paroles, structure et ordre sont remplacés ; les moments sont réunis
+  (ceux de la bibliothèque d'abord, puis les nouveaux) : ils sont saisis à la main et absents de la comparaison.
 - Les doublons sont recalculés contre la base au moment de l'enregistrement : un chant « nouveau » à l'écran
   qui est devenu un doublon dans le même lot est ignoré (« doublon dans cet import »).
 - **Édition** : changer le type d'une section renumérote les identifiants (refrains R, R2 ; couplets 1, 2 ;
@@ -1557,7 +1558,8 @@ Dans `docs/superpowers/specs/2026-10-03-import-chants-design.md`, insérer juste
 - Doublon « texte identique » : le texte est comparé après normalisation (casse, accents, ponctuation,
   espaces). Si l'import apporte une structure que le chant existant n'a pas, le chant est « différent » :
   Remplacer ajoute les refrains en gras au lieu de les ignorer silencieusement.
-- Remplacer garde l'id et les champs saisis à la main (auteur, compositeur, référence, notes).
+- Remplacer garde l'id et les champs saisis à la main (auteur, compositeur, référence, notes) et réunit les moments
+  (anciens puis nouveaux) au lieu de les écraser.
 - Les doublons sont recalculés à l'enregistrement : un chant « nouveau » devenu doublon dans le même lot est
   ignoré et signalé ; une erreur de base sur un chant n'arrête pas les autres.
 - L'ordre chanté est un champ texte modifiable (`R · 1 · R · 2 · R`) ; il est recalculé quand un type de
