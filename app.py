@@ -27,6 +27,7 @@ from tools.db_handler import (
     delete_chant,
     search_chants,
 )
+from tools.import_chants.ecran import afficher_import
 from tools.pptx_generator import generate_pptx
 
 # Configuration de la page
@@ -53,7 +54,7 @@ def _format_lecture_type(t: TypeLecture) -> str:
 st.sidebar.header("Paramètres")
 menu = st.sidebar.radio(
     "Menu",
-    ["📅 Générer une messe", "📚 Bibliothèque de chants"],
+    ["📅 Générer une messe", "📚 Bibliothèque de chants", "📥 Importer des chants"],
 )
 
 if menu == "📅 Générer une messe":
@@ -204,6 +205,9 @@ if menu == "📅 Générer une messe":
 
     elif not data:
         st.info("Choisissez une date et cliquez sur **Récupérer les lectures**.")
+
+elif menu == "📥 Importer des chants":
+    afficher_import()
 
 else:
     # Bibliothèque de chants
