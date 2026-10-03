@@ -15,7 +15,7 @@ from pptx.dml.color import RGBColor
 from pptx.enum.text import MSO_VERTICAL_ANCHOR, PP_ALIGN
 from pptx.util import Inches, Pt
 
-from tools.slicing import DEFAULT_CHARS_PER_LINE, DEFAULT_MAX_CHARS, split_text_for_slides
+from tools.slicing import DEFAULT_CHARS_PER_LINE, DEFAULT_MAX_CHARS, clean_spaces, split_text_for_slides
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = PROJECT_ROOT / "args" / "config.yaml"
@@ -32,8 +32,7 @@ def _strip_html(text: str) -> str:
         return ""
     text = re.sub(r"<[^>]+>", " ", text)
     text = html.unescape(text)
-    text = re.sub(r"[ \t\r\n\f\v]+", " ", text)  # l'espace insécable est conservée
-    return text.strip(" ")
+    return clean_spaces(text)
 
 
 def _get_slide_dimensions(config: dict) -> tuple[float, float]:
@@ -125,13 +124,13 @@ def generate_pptx(
         t = bloc.get("type", "")
 
         if t == "lecture":
-            label = bloc.get("intro_lue") or bloc.get("reference") or "Lecture"
+            label = clean_spaces(bloc.get("intro_lue") or bloc.get("reference") or "Lecture")
             chunks = split_text_for_slides(_strip_html(bloc.get("contenu", "")), **split_kwargs)
         elif t == "chant":
-            label = bloc.get("titre", "Chant")
+            label = clean_spaces(bloc.get("titre", "Chant"))
             chunks = split_text_for_slides(bloc.get("paroles", ""), mode="chant", **split_kwargs)
         elif t == "message":
-            label = bloc.get("titre", "Message")
+            label = clean_spaces(bloc.get("titre", "Message"))
             chunks = split_text_for_slides(_strip_html(bloc.get("contenu", "")), **split_kwargs)
         else:
             continue

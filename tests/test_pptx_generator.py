@@ -109,3 +109,16 @@ def test_html_entities_are_decoded():
     from tools.pptx_generator import _strip_html
 
     assert _strip_html("<p>L&#39;amour&nbsp;: Dieu &amp; nous</p>") == "L'amour\xa0: Dieu & nous"
+
+
+def test_aelf_verse_separators_do_not_leave_multiple_spaces(tmp_path):
+    html_content = ("<p><span>&nbsp;&nbsp; &nbsp;</span>Frères,&nbsp;&nbsp; &nbsp;ne soyez inquiets de rien&nbsp;! "
+                    "<span>&nbsp;&nbsp; &nbsp;</span>Et la paix de Dieu gardera vos cœurs.&nbsp;&nbsp;&nbsp;</p>")
+    out = tmp_path / "e.pptx"
+    generate_pptx([{"type": "lecture", "reference": "Ps  79 (80),\xa09-12,\xa013-14", "contenu": html_content}], out)
+    for slide in Presentation(str(out)).slides:
+        title, body = [sh.text_frame.text for sh in slide.shapes if sh.has_text_frame][:2]
+        assert title.startswith("Ps 79 (80), 9-12, 13-14 - ")
+        assert body == body.strip()
+        assert not re.search(r"[ \xa0 ]{2,}", body + title), repr(body)
+    assert body == "Frères, ne soyez inquiets de rien\xa0! Et la paix de Dieu gardera vos cœurs."
