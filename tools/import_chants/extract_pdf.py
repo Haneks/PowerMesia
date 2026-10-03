@@ -21,6 +21,9 @@ _TOLERANCE_COPIE = 1.5       # écart (pt) en dessous duquel deux caractères id
 _COPIES_FAUX_GRAS = 3        # un caractère imprimé 3 fois ou plus est du « faux gras »
 _RATIO_LIGNE_VIDE = 1.75     # écart entre deux lignes, en tailles de police, au-delà duquel une ligne vide les sépare
 _ESPACE_ENTRE_MOTS = 0.25    # écart (en tailles de police) à partir duquel on insère une espace
+# Erreurs levées par PyMuPDF en lisant les pages d'un PDF ouvert. Les erreurs de MuPDF (arbre des pages
+# mal formé...) sont des FzErrorBase, qui n'héritent PAS de RuntimeError.
+_ERREURS_DE_LECTURE = (ValueError, RuntimeError, fitz.mupdf.FzErrorBase)
 
 
 @dataclass
@@ -128,19 +131,7 @@ def _verifier_exploitable(document: fitz.Document) -> None:
         raise UnsupportedFile(raison)
 
 
-def extract_pdf(data: bytes) -> list[Line]:
-    """
-    Lit un PDF exporté de Word. Les lignes sont reconstruites caractère par caractère : gras de la
-    police ou « faux gras » (texte imprimé 3 fois), italique, soulignement (trait fin sous le texte).
-    Une ligne vide est restituée par `vide_avant` quand l'écart avec la ligne précédente dépasse
-    1,75 fois la taille de police.
-    """
-    try:
-        document = fitz.open(stream=data, filetype="pdf")
-    except Exception as e:  # PyMuPDF lève plusieurs types d'erreurs selon le fichier
-        raise UnsupportedFile("PDF illisible") from e
-    _verifier_exploitable(document)
-
+def _lignes_du_document(document: fitz.Document) -> list[Line]:
     lignes: list[Line] = []
     for page in document:
         traits = _soulignements(page)
@@ -155,3 +146,27 @@ def extract_pdf(data: bytes) -> list[Line]:
             lignes += du_rang[1:]
             base_precedente = base
     return lignes
+
+
+def extract_pdf(data: bytes) -> list[Line]:
+    """
+    Lit un PDF exporté de Word. Les lignes sont reconstruites caractère par caractère : gras de la
+    police ou « faux gras » (texte imprimé 3 fois), italique, soulignement (trait fin sous le texte).
+    Une ligne vide est restituée par `vide_avant` quand l'écart avec la ligne précédente dépasse
+    1,75 fois la taille de police.
+    Un PDF illisible ou protégé par un mot de passe est refusé (UnsupportedFile), jamais un plantage.
+    """
+    try:
+        document = fitz.open(stream=data, filetype="pdf")
+    except Exception as e:  # PyMuPDF lève plusieurs types d'erreurs selon le fichier
+        raise UnsupportedFile("PDF illisible") from e
+    try:
+        # Ouvert sans mot de passe, un PDF protégé n'est pas lisible : l'itération sur ses pages lèverait ValueError.
+        if document.needs_pass:
+            raise UnsupportedFile("PDF protégé par un mot de passe")
+        _verifier_exploitable(document)
+        return _lignes_du_document(document)
+    except _ERREURS_DE_LECTURE as e:
+        raise UnsupportedFile("PDF illisible") from e
+    finally:
+        document.close()

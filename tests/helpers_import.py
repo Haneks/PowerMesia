@@ -41,23 +41,44 @@ def docx_bytes(paragraphes: list, style_gras: bool = False) -> bytes:
     return sortie.getvalue()
 
 
-def pdf_bytes(lignes: list[dict]) -> bytes:
-    """
-    Un PDF d'une page. Chaque ligne : {"texte", "y", "taille" (12), "gras" (False), "souligne" (False),
-    "copies" (1 : 3 ou plus simule le « faux gras » en imprimant le texte plusieurs fois)}.
-    """
-    document = fitz.open()
-    page = document.new_page()
+def _ecrire_lignes(page: fitz.Page, lignes: list[dict]) -> None:
+    """Écrit les lignes (format de pdf_bytes) sur une page."""
     for ligne in lignes:
         taille = ligne.get("taille", 12)
-        police = "hebo" if ligne.get("gras") else "helv"
+        gras, italique = ligne.get("gras", False), ligne.get("italique", False)
+        police = "hebi" if gras and italique else "hebo" if gras else "heit" if italique else "helv"
         for copie in range(ligne.get("copies", 1)):
             page.insert_text((72 + 0.4 * copie, ligne["y"] + 0.3 * copie), ligne["texte"],
                              fontsize=taille, fontname=police)
         if ligne.get("souligne"):
             largeur = fitz.Font(police).text_length(ligne["texte"], fontsize=taille)  # gère les accents
             page.draw_line((72, ligne["y"] + 2), (72 + largeur, ligne["y"] + 2), width=0.8)
+
+
+def pdf_bytes(lignes: list[dict]) -> bytes:
+    """
+    Un PDF d'une page. Chaque ligne : {"texte", "y", "taille" (12), "gras" (False), "italique" (False),
+    "souligne" (False), "copies" (1 : 3 ou plus simule le « faux gras » en imprimant le texte plusieurs fois)}.
+    """
+    document = fitz.open()
+    _ecrire_lignes(document.new_page(), lignes)
     return document.tobytes()
+
+
+def pdf_deux_pages(page1: list[dict], page2: list[dict]) -> bytes:
+    """Un PDF de deux pages ; chaque page est une liste de lignes au même format que pdf_bytes."""
+    document = fitz.open()
+    for lignes in (page1, page2):
+        _ecrire_lignes(document.new_page(), lignes)
+    return document.tobytes()
+
+
+def pdf_protege(mot_de_passe: str = "secret") -> bytes:
+    """Un PDF avec du texte, chiffré en AES-256 : il ne s'ouvre qu'avec le mot de passe."""
+    document = fitz.open()
+    _ecrire_lignes(document.new_page(), [{"texte": "Le vent du soir se lève sur la ville", "y": 100}])
+    return document.tobytes(encryption=fitz.PDF_ENCRYPT_AES_256,
+                            user_pw=mot_de_passe, owner_pw=mot_de_passe + "-proprietaire")
 
 
 def pdf_image_seule() -> bytes:

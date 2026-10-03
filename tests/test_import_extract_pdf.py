@@ -2,7 +2,7 @@
 
 import pytest
 
-from tests.helpers_import import pdf_bytes, pdf_en_syllabes, pdf_image_seule
+from tests.helpers_import import pdf_bytes, pdf_deux_pages, pdf_en_syllabes, pdf_image_seule, pdf_protege
 from tools.import_chants.extract_pdf import _raison_de_refus, extract_pdf
 from tools.import_chants.modeles import UnsupportedFile
 
@@ -58,6 +58,27 @@ def test_pdf_en_syllabes_est_une_partition():
 def test_fichier_illisible():
     with pytest.raises(UnsupportedFile):
         extract_pdf(b"ceci n'est pas un PDF")
+
+
+def test_pdf_protege_par_mot_de_passe_est_refuse_proprement():
+    # Sans refus explicite, l'itération sur les pages d'un PDF chiffré lèverait ValueError.
+    with pytest.raises(UnsupportedFile) as erreur:
+        extract_pdf(pdf_protege())
+    assert "mot de passe" in erreur.value.raison
+
+
+def test_police_italique_donne_une_ligne_italique():
+    lignes = lignes_pdf({"texte": VERS, "y": 100, "italique": True}, {"texte": VERS + " encore", "y": 114})
+    assert [(l.italique, l.gras) for l in lignes] == [(True, False), (False, False)]
+
+
+def test_deux_pages_sont_lues_dans_l_ordre_et_la_page_2_ouvre_un_bloc():
+    page1 = [{"texte": VERS + " un", "y": 100}, {"texte": VERS + " deux", "y": 114}]
+    page2 = [{"texte": VERS + " trois", "y": 100}, {"texte": VERS + " quatre", "y": 114}]
+    lignes = extract_pdf(pdf_deux_pages(page1, page2))
+    assert [l.texte for l in lignes] == [VERS + " un", VERS + " deux", VERS + " trois", VERS + " quatre"]
+    assert lignes[2].vide_avant is True   # première ligne de la page 2 : nouveau bloc, même sans écart
+    assert lignes[1].vide_avant is False  # à l'intérieur d'une page, pas de ligne vide
 
 
 @pytest.mark.parametrize("polices, caracteres, empans, images, attendu", [
