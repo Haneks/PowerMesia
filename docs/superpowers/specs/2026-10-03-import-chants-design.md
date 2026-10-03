@@ -138,6 +138,46 @@ joué en premier. Exemples : refrain, 1, 2, pont → `R 1 R 2 R P R` ; couplet, 
 **Sûreté.** Seules les extensions `.docx` et `.pdf` sont acceptées, 10 Mo au plus par fichier, lecture en
 mémoire, rien n'est conservé sur le disque. Le HTML et les macros ne sont jamais interprétés.
 
+### Précisions apportées en livraison 2
+
+- Modules : le paquet contient aussi `modeles.py` (types), `lignes.py` (caractères → lignes, commun aux deux
+  extracteurs) et `importer.py` (point d'entrée `analyser_fichier`) ; `dedupe.py` reste en livraison 3.
+- Étiquettes de section : `1.`, `1)`, `Couplet 2`, `Pont :`, `Refrain`, `R/` ; une étiquette soulignée n'est
+  jamais un titre de chant.
+- Vocabulaire des en-têtes élargi : `Gloria`, `Agnus (Dei)`, `Kyrie`, `Evangile` / `Acclamation` (→ alléluia),
+  `Prière(s) universelle(s)`, préfixe `Chant de …`.
+- Soulignement PDF évalué par caractère (milieu du caractère sur un trait fin sous sa ligne de base), puis par
+  ligne avec le seuil de la moitié.
+- Titre tiré d'un vers : coupé à la première ponctuation, sans mot-outil à la fin.
+- Un seul en-tête de chant suffit à lire titre et moment (la règle d'origine « au moins 2 en-têtes » est
+  remplacée) ; un fichier sans aucun en-tête est un chant seul, titre tiré du nom du fichier.
+- La règle « titre en majuscules sous l'en-tête » s'applique sous tout en-tête de chant (pas seulement un
+  en-tête de moment) et au chant seul, sauf quand un `Title:` explicite donne déjà le titre.
+- Les consignes entre crochets (`[Procession des enfants]`) sont ignorées avec une note « Consigne ignorée ».
+- Un en-tête de feuille (date, « Messe … » sans moment du vocabulaire et suivi d'une ligne vide,
+  « Église … ») est reconnu à toute position ; un `Title:` explicite n'est jamais pris pour un en-tête de
+  feuille.
+- Limites : les tableaux et zones de texte Word ne sont pas lus ; un vers PDF replié sur deux lignes est
+  lu comme deux lignes.
+- Limites de lecture : garde de décompression d'un .docx (refusé au-delà de 50 Mo décompressés, de 5 Mo pour
+  `word/document.xml` ou de 1000 entrées) ; un PDF de plus de 50 pages est refusé. Un fichier abîmé donne
+  toujours un refus affichable (`UnsupportedFile`), jamais une exception.
+- Limite connue : un saut de page commence toujours un nouveau bloc (un refrain à cheval sur deux pages est coupé).
+- Après le mot-moment d'un en-tête : les séparateurs de tête (`:`, `–`) sont retirés ; un numéro de psaume
+  (`Psaume 22`, `Psaume 22 (21)`) fait partie du nom et du titre, jamais d'un recueil ; un complément de
+  l'intitulé (`Acclamation de l'Évangile`) n'est pas un recueil ; un texte précédé d'une virgule ou de `:` est des
+  paroles collées, précédé d'un tiret un recueil.
+- Un refrain étiqueté puis répété sans étiquette (ou sans gras) reste ce refrain : tout bloc au texte d'un refrain
+  est une répétition ; un bloc étiqueté dont le texte est celui du refrain est la répétition de ce refrain.
+  Un reste qui commence par un article ou une préposition (de, du, des, le, la, l', à, au…) est lu comme suite de
+  l'intitulé du moment, pas comme recueil. Lecture réelle de l'archive Word : les octets décompressés sont comptés
+  par blocs, sans se fier aux tailles déclarées dans les en-têtes du zip. Un numéro de psaume suivi du recueil
+  (`Psaume 22 – Lyon centre 4`, `Psaume 22 (21) : Lyon centre 4`) reste dans le nom du moment et du titre. Un renvoi est une ligne en majuscules commençant par `VOIR`, ou `voir (le) chant / psaume` ;
+  un vers « Voir ta lumière… » est conservé. Les apostrophes typographiques valent l'apostrophe droite.
+- Limite connue : un psaume dont le refrain est écrit sur la ligne d'en-tête, quand toute la ligne est en
+  gras et soulignée, est signalé « rien à importer » (le refrain y est indiscernable d'un recueil). Le cas
+  courant (refrain en gras dans le corps du psaume) est géré.
+
 ## 7. PowerPoint
 
 - Un bloc chant porte `structure` et `ordre` (à défaut : `paroles`, comme aujourd'hui).
@@ -191,4 +231,4 @@ Dépendances ajoutées : `python-docx`, `PyMuPDF`. Pas de modèle, pas de servic
 - Un fichier sans aucune mise en forme est découpé grossièrement : correction à l'écran de vérification.
 - La détection du soulignement et du faux gras en PDF est heuristique : couverte par des tests et par le test corpus.
 - Les fautes de frappe des feuilles sont conservées.
-- `PyMuPDF` est sous licence AGPL ; sans objet pour un usage paroissial, à revoir si l'application est redistribuée.
+- `PyMuPDF` est sous licence AGPL ; sans objet pour un usage paroissial, à revoir en cas d'usage en réseau par des tiers ou de redistribution (image Docker publiée, application donnée à une autre paroisse).
