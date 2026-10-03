@@ -194,3 +194,41 @@ def test_chant_wrapped_lines_are_limited_by_max_lines():
         displayed = sum(-(-len(part) // 30) or 1 for part in chunk.split("\n"))
         assert displayed <= 6, chunk
     assert len(chunks) == 2
+
+
+# --- Espaces insécables isolées (texte AELF) ---
+
+@pytest.mark.parametrize("sep", ["\xa0", " ", " \xa0 ", "\xa0\xa0"])
+def test_isolated_non_breaking_space_does_not_crash(sep):
+    text = f"Dieu est amour{sep}: celui qui demeure dans l’amour{sep}demeure en Dieu{sep}et Dieu en lui. " * 3
+    chunks = split_text_for_slides(text)
+    assert chunks
+    assert all(len(c) <= MAX for c in chunks)
+
+
+def test_nbsp_only_text_gives_no_chunk():
+    assert split_text_for_slides("\xa0 \xa0") == []
+
+
+@pytest.mark.parametrize("text", ["Il dit «", "Il dit : (", "« ", "«"])
+def test_trailing_lone_opening_quote_is_not_lost(text):
+    chunks = split_text_for_slides(text)
+    assert "".join(chunks).replace(" ", "") == text.replace(" ", "")
+
+
+def test_spaced_opening_quote_is_closed_by_closing_quote():
+    from tools.slicing import _normalize, _tokenize
+
+    s = _normalize("Il dit : « Viens et suis-moi. » Puis il partit avec eux.", "text")
+    tokens = _tokenize(s, "text")
+    in_quote = [t.in_quote for t in tokens]
+    assert in_quote[-1] is False
+    assert any(in_quote)  # la citation elle-même est bien détectée
+
+
+def test_tokens_never_overlap_when_opening_quote_precedes_lone_punctuation():
+    from tools.slicing import _normalize, _tokenize
+
+    s = _normalize("Il dit « . puis il partit.", "text")
+    tokens = _tokenize(s, "text")
+    assert all(a.end <= b.start for a, b in zip(tokens, tokens[1:]))
