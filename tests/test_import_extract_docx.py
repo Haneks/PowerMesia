@@ -1,6 +1,15 @@
 """Tests de tools/import_chants/extract_docx.py (documents Word fabriqués par les tests)."""
 
+import io
+import threading
+import zipfile
+
 import pytest
+
+from docx import Document
+from docx.enum.style import WD_STYLE_TYPE
+from docx.oxml import parse_xml
+from docx.oxml.ns import nsdecls
 
 from tests.helpers_import import docx_bytes
 from tools.import_chants.extract_docx import extract_docx
@@ -45,3 +54,125 @@ def test_fichier_illisible():
     with pytest.raises(UnsupportedFile) as erreur:
         extract_docx(b"ceci n'est pas un fichier Word")
     assert "Word" in erreur.value.raison
+
+
+def _bytes(document: Document) -> bytes:
+    """Sauvegarde un document Word en bytes."""
+    sortie = io.BytesIO()
+    document.save(sortie)
+    return sortie.getvalue()
+
+
+def test_runs_dans_insertions_balises_champs_sdt():
+    """Runs dans w:ins, w:smartTag, w:fldSimple et w:sdt sont lus."""
+    doc = Document()
+    p = doc.add_paragraph("avant ")
+    p._p.append(parse_xml('<w:ins %s w:id="1" w:author="test"><w:r><w:t>inséré </w:t></w:r></w:ins>' % nsdecls("w")))
+    p._p.append(parse_xml('<w:smartTag %s w:uri="x" w:element="y"><w:r><w:t>balise </w:t></w:r></w:smartTag>' % nsdecls("w")))
+    p._p.append(parse_xml('<w:fldSimple %s w:instr="PAGE"><w:r><w:t>champ </w:t></w:r></w:fldSimple>' % nsdecls("w")))
+    p._p.append(parse_xml('<w:sdt %s><w:sdtContent><w:r><w:t>contrôle</w:t></w:r></w:sdtContent></w:sdt>' % nsdecls("w")))
+    lignes = extract_docx(_bytes(doc))
+    assert [l.texte for l in lignes] == ["avant inséré balise champ contrôle"]
+
+
+def test_paragraphe_contenant_uniquement_un_run_insere():
+    """Un paragraphe avec seulement un w:ins run n'est pas vide."""
+    doc = Document()
+    doc.add_paragraph("a")
+    p = doc.add_paragraph()
+    p._p.append(parse_xml('<w:ins %s w:id="1" w:author="test"><w:r><w:t>b</w:t></w:r></w:ins>' % nsdecls("w")))
+    doc.add_paragraph("c")
+    lignes = extract_docx(_bytes(doc))
+    assert [(l.texte, l.vide_avant) for l in lignes] == [("a", False), ("b", False), ("c", False)]
+
+
+def test_vide_avant_avec_paragraphes_vides_intermediaires():
+    """Paragraphes ["a", "", "b", "c"] → a (False), b (True), c (False)."""
+    lignes = extract_docx(docx_bytes(["a", "", "b", "c"]))
+    assert [(l.texte, l.vide_avant) for l in lignes] == [("a", False), ("b", True), ("c", False)]
+
+
+def test_hyperlink_avec_formattage():
+    """Texte dans w:hyperlink avec gras est lu et le gras est détecté."""
+    doc = Document()
+    p = doc.add_paragraph()
+    p._p.append(parse_xml('<w:hyperlink %s><w:r><w:rPr><w:b/></w:rPr><w:t>lien gras</w:t></w:r></w:hyperlink>' % nsdecls("w")))
+    lignes = extract_docx(_bytes(doc))
+    assert [l.texte for l in lignes] == ["lien gras"]
+    assert lignes[0].gras is True
+
+
+def test_style_paragraphe_parent_avec_gras():
+    """Style enfant hérité de parent avec gras sur deux niveaux."""
+    doc = Document()
+    style_parent = doc.styles.add_style("Parent", WD_STYLE_TYPE.PARAGRAPH)
+    style_parent.font.bold = True
+    style_enfant = doc.styles.add_style("Enfant", WD_STYLE_TYPE.PARAGRAPH)
+    style_enfant.base_style = style_parent
+    p = doc.add_paragraph(style=style_enfant)
+    run = p.add_run("texte")
+    lignes = extract_docx(_bytes(doc))
+    assert lignes[0].gras is True
+
+
+def test_style_caractere_avec_gras():
+    """Style caractère appliqué à un run avec gras."""
+    doc = Document()
+    style_char = doc.styles.add_style("GrasChar", WD_STYLE_TYPE.CHARACTER)
+    style_char.font.bold = True
+    p = doc.add_paragraph()
+    run = p.add_run("texte")
+    run.style = style_char
+    lignes = extract_docx(_bytes(doc))
+    assert lignes[0].gras is True
+
+
+def test_run_bold_false_override_style_bold():
+    """Un run avec bold=False override le style bold=True."""
+    doc = Document()
+    style = doc.styles.add_style("GrasStyle", WD_STYLE_TYPE.PARAGRAPH)
+    style.font.bold = True
+    p = doc.add_paragraph(style=style)
+    run = p.add_run("texte")
+    run.bold = False
+    lignes = extract_docx(_bytes(doc))
+    assert lignes[0].gras is False
+
+
+def test_tableau_est_ignore():
+    """Un tableau dans le document n'est pas lu, pas d'exception."""
+    doc = Document()
+    doc.add_paragraph("avant")
+    table = doc.add_table(1, 1)
+    table.rows[0].cells[0].paragraphs[0].add_run("dans le tableau")
+    doc.add_paragraph("après")
+    lignes = extract_docx(_bytes(doc))
+    assert [l.texte for l in lignes] == ["avant", "après"]
+
+
+def test_xml_corrompu_dans_zip_valide():
+    """Un fichier .docx avec document.xml corrompu lève UnsupportedFile."""
+    doc = Document()
+    doc.add_paragraph("texte")
+    data = _bytes(doc)
+    with zipfile.ZipFile(io.BytesIO(data), "r") as zin:
+        files = {name: zin.read(name) if name != "word/document.xml" else b"<w:document" for name in zin.namelist()}
+    sortie = io.BytesIO()
+    with zipfile.ZipFile(sortie, "w") as zout:
+        for name, content in files.items():
+            zout.writestr(name, content)
+    with pytest.raises(UnsupportedFile) as erreur:
+        extract_docx(sortie.getvalue())
+    assert "Word" in erreur.value.raison
+
+
+def test_style_cyclique_ne_boucle_pas():
+    """Un style avec base_style cyclique ne cause pas de boucle infinie."""
+    doc = Document()
+    style = doc.styles.add_style("Cyclique", WD_STYLE_TYPE.PARAGRAPH)
+    style.base_style = style
+    p = doc.add_paragraph("texte", style=style)
+    thread = threading.Thread(target=lambda: extract_docx(_bytes(doc)), daemon=True)
+    thread.start()
+    thread.join(timeout=5)
+    assert not thread.is_alive(), "extract_docx est bloquée sur un style cyclique"
