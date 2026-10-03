@@ -5,7 +5,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Optional
 
-from context.models import Chant
+from context.models import Chant, MomentLiturgique
 from tools.db_handler import create_chant, init_db, search_chants, update_chant
 from tools.import_chants.dedupe import Doublon, trouver_doublon
 
@@ -46,7 +46,7 @@ def importer_chants(decisions: list[Decision], db_path: Optional[Path] = None) -
         chant = decision.chant
         try:
             resultat = trouver_doublon(
-                chant.titre, chant.recueil, chant.paroles, bool(chant.structure), search_chants(db_path=db_path)
+                chant.titre, chant.recueil, chant.paroles, chant.structure, chant.ordre, search_chants(db_path=db_path)
             )
             if resultat.statut is Doublon.AUCUN:
                 create_chant(chant, db_path)
@@ -71,13 +71,17 @@ def importer_chants(decisions: list[Decision], db_path: Optional[Path] = None) -
 def _remplacer(existant: Chant, nouveau: Chant, db_path: Optional[Path]) -> None:
     """
     Remplace texte, structure, ordre et recueil ; garde l'identité et les champs saisis à la main.
-    Les moments sont réunis (ceux de la bibliothèque d'abord, puis les nouveaux) : un chant déjà classé
-    ne perd pas ses moments parce que le document importé n'en cite qu'un.
+    Les moments sont réunis, sans doublon (la base les relit dans l'ordre alphabétique) : un chant déjà
+    classé ne perd pas ses moments parce que le document importé n'en cite qu'un, et ne reçoit pas
+    « Autre », moment par défaut d'un chant importé sans en-tête.
     """
     existant.titre = nouveau.titre
     existant.paroles = nouveau.paroles
     existant.recueil = nouveau.recueil
     existant.structure = nouveau.structure
     existant.ordre = nouveau.ordre
-    existant.moments = existant.moments + [m for m in nouveau.moments if m not in existant.moments]
+    ajouts = [m for m in nouveau.moments if m not in existant.moments]
+    if existant.moments:
+        ajouts = [m for m in ajouts if m is not MomentLiturgique.AUTRE]
+    existant.moments = existant.moments + ajouts
     update_chant(existant, db_path)

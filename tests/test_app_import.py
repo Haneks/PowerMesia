@@ -199,3 +199,49 @@ def test_doublon_different_ajouter_quand_meme():
     widget(at.radio, "_action").set_value("ajouter").run()
     bouton_import(at).click().run()
     assert len(search_chants()) == 2
+
+
+def _chant_identique_a_la_feuille(recueil=None) -> int:
+    return create_chant(Chant(
+        titre="Chantons au bord du fleuve", moments=[M.ENTREE], recueil=recueil,
+        paroles="Chantons au bord du fleuve\n\nPremier couplet inventé\n\nSecond couplet inventé",
+        structure=[SectionChant("R", TypeSection.REFRAIN, ["Chantons au bord du fleuve"]),
+                   SectionChant("1", TypeSection.COUPLET, ["Premier couplet inventé"]),
+                   SectionChant("2", TypeSection.COUPLET, ["Second couplet inventé"])],
+        ordre=["R", "1", "R", "2", "R"],
+    ))
+
+
+def test_meme_texte_mais_structure_corrigee_a_l_ecran_est_un_doublon_different_remplacable():
+    ancien = _chant_identique_a_la_feuille()
+    at = page([fichier()])
+    assert "déjà présent (identique)" in marqueurs(at) and bouton_import(at).disabled
+    widget(at.selectbox, "_s2_type").set_value("pont").run()
+    assert "déjà présent (différent)" in marqueurs(at)
+    assert widget(at.radio, "_action").value == "ignorer"
+    assert any("Même texte : seule la structure (refrains, ordre chanté) diffère." in c.value for c in at.caption)
+    widget(at.radio, "_action").set_value("remplacer").run()
+    assert not bouton_import(at).disabled
+    bouton_import(at).click().run()
+    [chant] = search_chants()
+    assert chant.id == ancien and [s.id for s in chant.structure] == ["R", "1", "P"]
+    assert [s.type for s in chant.structure][2] is TypeSection.PONT
+
+
+def test_texte_different_n_affiche_pas_la_legende_de_structure():
+    _chant_existant_different()
+    at = page([fichier()])
+    assert not any("seule la structure" in c.value for c in at.caption)
+
+
+def test_chant_nouveau_de_meme_titre_dans_un_autre_recueil_affiche_une_legende_de_verification():
+    _chant_identique_a_la_feuille(recueil="Lyon centre 2")
+    at = page([fichier()])
+    assert "🆕 nouveau" in marqueurs(at)
+    legende = next(c.value for c in at.caption if "Un chant de même titre existe déjà" in c.value)
+    assert "Lyon centre 2" in legende and "vérifiez qu'il ne s'agit pas du même chant" in legende
+
+
+def test_pas_de_legende_de_titre_voisin_sans_chant_de_meme_titre():
+    at = page([fichier()])
+    assert not any("même titre existe déjà" in c.value for c in at.caption)

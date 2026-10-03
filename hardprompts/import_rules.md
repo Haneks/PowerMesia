@@ -44,10 +44,14 @@ gras dans le corps du psaume) est géré.
 - **Doublon** : même titre et même recueil une fois normalisés (casse, accents, apostrophes, ponctuation et
   espaces ignorés). Texte identique : ignoré. Texte différent : l'utilisateur choisit Ignorer (défaut),
   Remplacer ou Ajouter quand même. Même texte mais l'import apporte une structure (refrains) que le chant
-  existant n'a pas : « différent » (le remplacement ajoute les refrains en gras).
+  existant n'a pas, ou dont les types de sections, les lignes ou l'ordre chanté diffèrent de ceux du chant
+  existant : « différent » (le remplacement ajoute ou corrige les refrains). Un import sans structure ne
+  compare que le texte. À l'écran, un chant « nouveau » dont le titre existe déjà sous un autre recueil (ou
+  sans recueil) reçoit une légende de vérification ; l'import ne change pas (la clé reste titre + recueil).
 - **Remplacer** garde l'identité du chant (id) et les champs saisis à la main (auteur, compositeur,
-  référence, notes) ; titre, recueil, paroles, structure et ordre sont remplacés ; les moments sont réunis
-  (ceux de la bibliothèque d'abord, puis les nouveaux) : ils sont saisis à la main et absents de la comparaison.
+  référence, notes) ; titre, recueil, paroles, structure et ordre sont remplacés ; les moments sont réunis,
+  sans doublon (la base les relit dans l'ordre alphabétique), et « Autre » n'est pas ajouté à un chant qui
+  a déjà un moment : ils sont saisis à la main et absents de la comparaison.
 - Les doublons sont recalculés contre la base au moment de l'enregistrement : un chant « nouveau » à l'écran
   qui est devenu un doublon dans le même lot est ignoré (« doublon dans cet import »).
 - **Édition** : changer le type d'une section renumérote les identifiants (refrains R, R2 ; couplets 1, 2 ;

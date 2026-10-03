@@ -89,6 +89,32 @@ def test_remplacement_place_les_moments_existants_d_abord_puis_les_nouveaux_sans
     assert enregistres == [[M.ENTREE, M.COMMUNION, M.ENVOI, M.OFFERTOIRE]]
 
 
+def test_remplacement_n_ajoute_pas_autre_quand_l_existant_a_deja_un_moment(monkeypatch):
+    import tools.import_chants.enregistrer as module
+
+    existant = nouveau(paroles="Un ancien texte")
+    existant.moments = [M.COMMUNION]
+    importe = nouveau()
+    importe.moments = [M.AUTRE]
+    obtenus = []
+    monkeypatch.setattr(module, "update_chant", lambda chant, db_path=None: obtenus.append(list(chant.moments)))
+    module._remplacer(existant, importe, None)
+    assert obtenus == [[M.COMMUNION]]
+
+
+def test_remplacement_garde_les_moments_importes_si_l_existant_n_en_a_aucun(monkeypatch):
+    import tools.import_chants.enregistrer as module
+
+    existant = nouveau(paroles="Un ancien texte")
+    existant.moments = []
+    importe = nouveau()
+    importe.moments = [M.AUTRE]
+    obtenus = []
+    monkeypatch.setattr(module, "update_chant", lambda chant, db_path=None: obtenus.append(list(chant.moments)))
+    module._remplacer(existant, importe, None)
+    assert obtenus == [[M.AUTRE]]
+
+
 def test_chant_vu_different_devenu_aucun_a_l_enregistrement_est_cree_meme_si_ignorer(db):
     # Le chant existant a disparu entre l'écran de vérification et l'enregistrement.
     recap = importer_chants([Decision(nouveau(), Action.IGNORER, Doublon.DIFFERENT)], db)

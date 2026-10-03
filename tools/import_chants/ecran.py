@@ -16,7 +16,7 @@ from tools.import_chants.brouillon import (
     SectionEditee,
     sections_editees,
 )
-from tools.import_chants.dedupe import Doublon, trouver_doublon
+from tools.import_chants.dedupe import Doublon, normaliser, titres_voisins, trouver_doublon
 from tools.import_chants.enregistrer import Action, Decision, importer_chants
 from tools.import_chants.importer import analyser_fichier
 from tools.import_chants.modeles import UnsupportedFile
@@ -95,11 +95,19 @@ def _carte(prefixe: str, fichier: str, chant, bibliotheque) -> "Decision | None"
         statut, action = Doublon.AUCUN, Action.AJOUTER
         if brouillon is not None:
             resultat = trouver_doublon(
-                brouillon.titre, brouillon.recueil, brouillon.paroles, bool(brouillon.structure), bibliotheque
+                brouillon.titre, brouillon.recueil, brouillon.paroles, brouillon.structure, brouillon.ordre, bibliotheque
             )
             statut = resultat.statut
             if statut is Doublon.DIFFERENT:
                 action = _choisir_action(prefixe, resultat.existant, brouillon)
+            elif statut is Doublon.AUCUN:
+                voisins = titres_voisins(brouillon.titre, brouillon.recueil, bibliotheque)
+                if voisins:
+                    recueils = ", ".join(sorted({c.recueil or "sans recueil" for c in voisins}))
+                    st.caption(
+                        f"Un chant de même titre existe déjà (recueil : {recueils}) : "
+                        "vérifiez qu'il ne s'agit pas du même chant."
+                    )
         with entete:
             st.markdown(f"**{BADGES[statut] if brouillon else '❌ non importable'}** — {fichier}")
             if erreur:
@@ -120,6 +128,8 @@ def _choisir_action(prefixe: str, existant, nouveau) -> Action:
     ancien.text(existant.paroles)
     courant.caption("Texte importé")
     courant.text(nouveau.paroles)
+    if normaliser(existant.paroles) == normaliser(nouveau.paroles):
+        st.caption("Même texte : seule la structure (refrains, ordre chanté) diffère.")
     return action
 
 
