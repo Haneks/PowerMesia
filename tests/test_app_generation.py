@@ -1,16 +1,25 @@
 """Test de bout en bout de la page « Générer une messe » : un chant structuré de la bibliothèque, ajouté
-aux blocs, ressort dans le PowerPoint avec son refrain en gras et dans l'ordre chanté."""
+aux blocs, ressort dans le PowerPoint avec son refrain en gras et dans l'ordre chanté mémorisé (un ordre
+qui n'est PAS celui que le générateur calculerait seul, pour prouver que l'ordre mémorisé est bien transmis)."""
 
 import io
 from pathlib import Path
 
+import pytest
 from pptx import Presentation
 from streamlit.testing.v1 import AppTest
 
 from context.models import Chant, LectureLiturgique, MomentLiturgique, SectionChant, TypeSection, TypeLecture
-from tools.db_handler import create_chant, init_db
+from tools.db_handler import create_chant, delete_chant, init_db, search_chants
 
 APP = str(Path(__file__).resolve().parents[1] / "app.py")
+
+
+@pytest.fixture(autouse=True)
+def bibliotheque_vide():
+    init_db()
+    for chant in search_chants():
+        delete_chant(chant.id)
 
 
 def _chant_structure() -> int:
@@ -23,7 +32,7 @@ def _chant_structure() -> int:
             SectionChant("R", TypeSection.REFRAIN, ["Refrain inventé de bout en bout"]),
             SectionChant("1", TypeSection.COUPLET, ["Premier couplet inventé"]),
         ],
-        ordre=["R", "1", "R"],
+        ordre=["1", "R"],  # ni l'ordre calculé (R 1 R), ni l'ordre naturel : il doit être transmis tel quel
     ))
 
 
@@ -39,7 +48,7 @@ def _lignes_du_pptx(octets: bytes) -> list[tuple[str, bool]]:
     return lignes
 
 
-def test_chant_structure_ajoute_a_la_messe_sort_en_gras_dans_l_ordre_chante():
+def test_chant_structure_ajoute_a_la_messe_sort_en_gras_dans_l_ordre_chante_memorise():
     _chant_structure()
     at = AppTest.from_file(APP, default_timeout=30).run()
     at.session_state["aelf_data"] = {
@@ -60,7 +69,6 @@ def test_chant_structure_ajoute_a_la_messe_sort_en_gras_dans_l_ordre_chante():
     lignes = _lignes_du_pptx(at.session_state["pptx_bytes"])
     chant = [l for l in lignes if l[0] in ("Refrain inventé de bout en bout", "Premier couplet inventé")]
     assert chant == [
-        ("Refrain inventé de bout en bout", True),
         ("Premier couplet inventé", False),
         ("Refrain inventé de bout en bout", True),
     ]

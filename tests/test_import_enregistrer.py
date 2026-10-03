@@ -63,6 +63,39 @@ def test_doublon_different_remplace_garde_l_identite_et_les_champs_saisis(db):
     assert (chant.auteur, chant.compositeur, chant.reference, chant.notes) == ("Une autrice", "Un compositeur", "B 12", "Une note")
 
 
+def test_remplacement_reunit_les_moments_sans_perdre_ceux_de_la_bibliotheque(db):
+    ancien = nouveau(paroles="Un ancien texte")
+    ancien.moments = [M.ENTREE, M.COMMUNION, M.ENVOI]
+    create_chant(ancien, db)
+    importe = nouveau()
+    importe.moments = [M.ENTREE, M.OFFERTOIRE]
+    recap = importer_chants([Decision(importe, Action.REMPLACER, Doublon.DIFFERENT)], db)
+    assert recap.remplaces == ["Venez au fleuve"]
+    [chant] = search_chants(db_path=db)
+    # La base ne mémorise pas l'ordre des moments (relus triés) : ici on vérifie l'ensemble, sans doublon.
+    assert len(chant.moments) == 4 and set(chant.moments) == {M.ENTREE, M.COMMUNION, M.ENVOI, M.OFFERTOIRE}
+
+
+def test_remplacement_place_les_moments_existants_d_abord_puis_les_nouveaux_sans_doublon(monkeypatch):
+    import tools.import_chants.enregistrer as module
+
+    enregistres = []
+    monkeypatch.setattr(module, "update_chant", lambda chant, db_path=None: enregistres.append(list(chant.moments)))
+    existant = nouveau(paroles="Un ancien texte")
+    existant.moments = [M.ENTREE, M.COMMUNION, M.ENVOI]
+    importe = nouveau()
+    importe.moments = [M.ENTREE, M.OFFERTOIRE]
+    module._remplacer(existant, importe, None)
+    assert enregistres == [[M.ENTREE, M.COMMUNION, M.ENVOI, M.OFFERTOIRE]]
+
+
+def test_chant_vu_different_devenu_aucun_a_l_enregistrement_est_cree_meme_si_ignorer(db):
+    # Le chant existant a disparu entre l'écran de vérification et l'enregistrement.
+    recap = importer_chants([Decision(nouveau(), Action.IGNORER, Doublon.DIFFERENT)], db)
+    assert recap.ajoutes == ["Venez au fleuve"] and not recap.ignores
+    assert len(search_chants(db_path=db)) == 1
+
+
 def test_meme_texte_sans_structure_est_remplace_pour_apporter_les_refrains(db):
     ancien = nouveau()
     ancien.structure, ancien.ordre = [], []

@@ -23,7 +23,9 @@ class ResultatDoublon:
 
 def normaliser(texte: Optional[str]) -> str:
     """Casse, accents, apostrophes, ponctuation et espaces ignorés : « Venez, au Fleuve ! » = « venez au fleuve »."""
-    decompose = unicodedata.normalize("NFKD", (texte or "").replace("’", "'"))
+    # « œ » et « æ » ne se décomposent pas en NFKD : « Cœur » doit valoir « Coeur ».
+    ligatures = (texte or "").replace("’", "'").replace("œ", "oe").replace("Œ", "OE").replace("æ", "ae").replace("Æ", "AE")
+    decompose = unicodedata.normalize("NFKD", ligatures)
     sans_accents = "".join(c for c in decompose if not unicodedata.combining(c))
     return " ".join(re.sub(r"[^a-z0-9]+", " ", sans_accents.casefold()).split())
 

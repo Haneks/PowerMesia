@@ -30,7 +30,7 @@ def main() -> Path:
         "titre": "Chant de démonstration",
         "paroles": "",
         "structure": sections_to_dicts(SECTIONS),
-        "ordre": compute_ordre(SECTIONS),
+        "ordre_chant": compute_ordre(SECTIONS),
     }
     generate_pptx([bloc], out)
     return out

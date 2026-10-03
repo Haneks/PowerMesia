@@ -81,6 +81,12 @@ def test_ordre_initial_recalcule_quand_une_section_est_videe():
     assert ordre_initial(chant, editees, repeter=True) == ["R", "1", "R"]
 
 
+def test_ordre_initial_recalcule_quand_l_ordre_cite_une_section_absente():
+    # L'ordre du document cite « 9 », qui n'existe pas dans la structure : on ne le reprend pas tel quel
+    chant = chant_analyse(trois_sections(), ["R", "1", "9", "R"])
+    assert ordre_initial(chant, sections_editees(chant), repeter=True) == ["R", "1", "R", "2", "R"]
+
+
 def test_ordre_initial_sans_refrain_donne_l_ordre_du_document():
     structure = [SectionChant("1", C, ["a"]), SectionChant("2", C, ["b"])]
     chant = chant_analyse(structure, ["1", "2"])

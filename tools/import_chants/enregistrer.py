@@ -69,11 +69,15 @@ def importer_chants(decisions: list[Decision], db_path: Optional[Path] = None) -
 
 
 def _remplacer(existant: Chant, nouveau: Chant, db_path: Optional[Path]) -> None:
-    """Remplace texte, structure, ordre, recueil et moments ; garde l'identité et les champs saisis à la main."""
+    """
+    Remplace texte, structure, ordre et recueil ; garde l'identité et les champs saisis à la main.
+    Les moments sont réunis (ceux de la bibliothèque d'abord, puis les nouveaux) : un chant déjà classé
+    ne perd pas ses moments parce que le document importé n'en cite qu'un.
+    """
     existant.titre = nouveau.titre
     existant.paroles = nouveau.paroles
     existant.recueil = nouveau.recueil
     existant.structure = nouveau.structure
     existant.ordre = nouveau.ordre
-    existant.moments = nouveau.moments
+    existant.moments = existant.moments + [m for m in nouveau.moments if m not in existant.moments]
     update_chant(existant, db_path)
