@@ -67,7 +67,7 @@ Pour utiliser des volumes nommés au lieu de dossiers locaux, adapter la section
 ├── args/
 │   └── config.yaml     # Configuration (design, API AELF, découpage)
 ├── context/            # Modèles et schéma DB
-├── tools/              # API AELF, générateur PPTX, base chants
+├── tools/              # API AELF, générateur PPTX, base chants, import Word/PDF (tools/import_chants/)
 ├── requirements.txt
 ├── Dockerfile
 └── docker-compose.yml

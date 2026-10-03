@@ -13,6 +13,7 @@ powerpoint-paroissial/
 │   ├── chant_structure.py    # Structure d'un chant (refrain, ordre chanté)
 │   ├── pptx_generator.py     # Génération PowerPoint (python-pptx)
 │   ├── slicing.py            # Découpage du texte en slides
+│   ├── import_chants/        # Lecture et analyse de feuilles de messe et de chants (Word / PDF)
 │   └── db_handler.py         # Bibliothèque de chants (SQLite/JSON)
 │
 ├── context/                  # Trace - Schémas et règles

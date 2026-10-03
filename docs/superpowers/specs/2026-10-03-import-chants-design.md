@@ -138,6 +138,31 @@ joué en premier. Exemples : refrain, 1, 2, pont → `R 1 R 2 R P R` ; couplet, 
 **Sûreté.** Seules les extensions `.docx` et `.pdf` sont acceptées, 10 Mo au plus par fichier, lecture en
 mémoire, rien n'est conservé sur le disque. Le HTML et les macros ne sont jamais interprétés.
 
+### Précisions apportées en livraison 2
+
+- Modules : le paquet contient aussi `modeles.py` (types), `lignes.py` (caractères → lignes, commun aux deux
+  extracteurs) et `importer.py` (point d'entrée `analyser_fichier`) ; `dedupe.py` reste en livraison 3.
+- Étiquettes de section : `1.`, `1)`, `Couplet 2`, `Pont :`, `Refrain`, `R/` ; une étiquette soulignée n'est
+  jamais un titre de chant.
+- Vocabulaire des en-têtes élargi : `Gloria`, `Agnus (Dei)`, `Kyrie`, `Evangile` / `Acclamation` (→ alléluia),
+  `Prière(s) universelle(s)`, préfixe `Chant de …`.
+- Soulignement PDF évalué par caractère (milieu du caractère sur un trait fin sous sa ligne de base), puis par
+  ligne avec le seuil de la moitié.
+- Titre tiré d'un vers : coupé à la première ponctuation, sans mot-outil à la fin.
+- Un seul en-tête de chant suffit à lire titre et moment (la règle d'origine « au moins 2 en-têtes » est
+  remplacée) ; un fichier sans aucun en-tête est un chant seul, titre tiré du nom du fichier.
+- La règle « titre en majuscules sous l'en-tête » s'applique sous tout en-tête de chant (pas seulement un
+  en-tête de moment) et au chant seul, sauf quand un `Title:` explicite donne déjà le titre.
+- Les consignes entre crochets (`[Procession des enfants]`) sont ignorées avec une note « Consigne ignorée ».
+- Un en-tête de feuille (date, « Messe … » sans moment du vocabulaire et suivi d'une ligne vide,
+  « Église … ») est reconnu à toute position ; un `Title:` explicite n'est jamais pris pour un en-tête de
+  feuille.
+- Limites : les tableaux et zones de texte Word ne sont pas lus ; un vers PDF replié sur deux lignes est
+  lu comme deux lignes.
+- Limite connue : un psaume dont le refrain est écrit sur la ligne d'en-tête, quand toute la ligne est en
+  gras et soulignée, est signalé « rien à importer » (le refrain y est indiscernable d'un recueil). Le cas
+  courant (refrain en gras dans le corps du psaume) est géré.
+
 ## 7. PowerPoint
 
 - Un bloc chant porte `structure` et `ordre` (à défaut : `paroles`, comme aujourd'hui).
