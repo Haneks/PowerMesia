@@ -174,6 +174,8 @@ def _decomposer_entete(texte: str) -> tuple[str, Optional[str], Optional[str]]:
 
 def _est_metadonnee(entete: _Entete, lignes: list[Line]) -> bool:
     """En-tête de la feuille (date, nom de l'église) plutôt qu'un chant."""
+    if entete.titre_explicite:  # « Title: Dimanche en famille » est un vrai titre
+        return False
     normal = _sans_accents(entete.texte)
     if _DATE.search(normal):
         return True

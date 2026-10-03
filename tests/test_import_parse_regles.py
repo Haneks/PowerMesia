@@ -343,3 +343,9 @@ def test_titre_d_un_chant_seul_tire_du_nom_du_fichier(nom_fichier, titre):
 def test_moment_d_un_chant_seul_lu_dans_un_nom_de_fichier_a_underscores():
     chant = chant_de(L("Un vers inventé"), nom="alleluia_du_matin.docx")
     assert (chant.titre, chant.moment) == ("Alleluia du matin", M.ALLELUIA)
+
+
+def test_titre_explicite_avec_un_jour_de_la_semaine_n_est_pas_un_en_tete_de_feuille():
+    lignes = [L("Title: Dimanche en famille"), L("Artist: Un recueil"), L("Un vers inventé", vide=True)]
+    [chant] = parse_lines(lignes, "x.docx").chants
+    assert chant.titre == "Dimanche en famille"
