@@ -16,8 +16,10 @@ OUTPUT_DIR = Path(os.environ.get("OUTPUT_DIR", str(ROOT / "output")))
 
 import streamlit as st
 
-from context.models import Chant, MomentLiturgique, TypeLecture
+from components.sortable_blocs import sortable_blocs
+from context.models import Chant, MomentLiturgique
 from tools.aelf_service import get_messe
+from tools.blocs import appliquer_ordre, assurer_uid, elements_liste, supprimer_bloc
 from tools.chant_structure import sections_to_dicts
 from tools.db_handler import (
     init_db,
@@ -40,14 +42,16 @@ st.set_page_config(
 st.title("⛪ Générateur de PowerPoint Paroissial")
 
 
-def _format_lecture_type(t: TypeLecture) -> str:
-    d = {
-        TypeLecture.PREMIERE_LECTURE: "1ère lecture",
-        TypeLecture.PSAUME: "Psaume",
-        TypeLecture.DEUXIEME_LECTURE: "2e lecture",
-        TypeLecture.EVANGILE: "Évangile",
-    }
-    return d.get(t, t.value)
+def _sur_ordre_change() -> None:
+    """Rappel du composant glissable : le navigateur envoie les identifiants dans le nouvel ordre."""
+    ids = st.session_state["liste_blocs"].reorder
+    st.session_state["blocs"] = appliquer_ordre(st.session_state.get("blocs", []), ids)
+
+
+def _sur_suppression() -> None:
+    """Rappel du composant glissable : le navigateur envoie l'identifiant du bloc à supprimer."""
+    uid = st.session_state["liste_blocs"].delete
+    st.session_state["blocs"] = supprimer_bloc(st.session_state.get("blocs", []), uid)
 
 
 # Sidebar
@@ -86,7 +90,7 @@ if menu == "📅 Générer une messe":
 
         with col1:
             st.subheader("Blocs de la messe")
-            st.caption("Réordonnez les blocs avec ⬆️ / ⬇️ avant de générer le PowerPoint.")
+            st.caption("Maintenez les trois traits ≡ d'un bloc et faites-le glisser pour changer l'ordre avant de générer le PowerPoint.")
             if not blocs:
                 # Construire les blocs initiaux à partir des lectures
                 for i, lect in enumerate(data["lectures"]):
@@ -101,42 +105,17 @@ if menu == "📅 Générer une messe":
                     })
                 st.session_state["blocs"] = blocs
 
-            for i, b in enumerate(blocs):
-                if b.get("type") == "lecture":
-                    label = f"{_format_lecture_type(TypeLecture(b.get('lecture_type', 'lecture_1')))} — {b.get('reference', 'Sans ref')}"
-                else:
-                    label = f"{b.get('type', 'lecture').title()} — {b.get('titre', b.get('reference', 'Bloc'))}"
-                with st.expander(f"**{i + 1}.** {label}", expanded=(i == 0)):
-                    if b.get("type") == "lecture":
-                        st.write(b.get("intro_lue", ""), b.get("reference", ""))
-                        st.caption(b.get("contenu", "")[:200] + "...")
-                    elif b.get("type") == "chant":
-                        st.write("Chant :", b.get("titre", ""))
-                    elif b.get("type") == "message":
-                        st.write("Message :", b.get("titre", ""))
-                    # Ordre : boutons Monter / Descendre / Supprimer
-                    btn_col1, btn_col2, btn_col3, _ = st.columns([1, 1, 1, 3])
-                    with btn_col1:
-                        if st.button("⬆️ Monter", key=f"up_{i}", disabled=(i == 0)):
-                            blocs[i], blocs[i - 1] = blocs[i - 1], blocs[i]
-                            for j, bloc in enumerate(blocs):
-                                bloc["ordre"] = j
-                            st.session_state["blocs"] = blocs
-                            st.rerun()
-                    with btn_col2:
-                        if st.button("⬇️ Descendre", key=f"down_{i}", disabled=(i == len(blocs) - 1)):
-                            blocs[i], blocs[i + 1] = blocs[i + 1], blocs[i]
-                            for j, bloc in enumerate(blocs):
-                                bloc["ordre"] = j
-                            st.session_state["blocs"] = blocs
-                            st.rerun()
-                    with btn_col3:
-                        if st.button("🗑️ Supprimer", key=f"del_{i}"):
-                            blocs.pop(i)
-                            for j, bloc in enumerate(blocs):
-                                bloc["ordre"] = j
-                            st.session_state["blocs"] = blocs
-                            st.rerun()
+            # Chaque bloc a un identifiant stable (aussi pour une session ouverte avant cette version) :
+            # le navigateur renvoie l'ordre en identifiants, jamais en positions.
+            assurer_uid(blocs)
+            # Ordre et suppression se font dans le composant ; les rappels _sur_* appliquent
+            # le résultat avant la réexécution du script.
+            sortable_blocs(
+                elements_liste(blocs),
+                key="liste_blocs",
+                on_reorder=_sur_ordre_change,
+                on_delete=_sur_suppression,
+            )
 
         with col2:
             st.subheader("Ajouter un chant")

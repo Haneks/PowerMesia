@@ -8,8 +8,12 @@ powerpoint-paroissial/
 ├── orchestration/            # Stress-test - Logique globale
 │   └── main.py
 │
+├── components/               # Composants d'interface Streamlit
+│   └── sortable_blocs/       # Liste de blocs glissable (poignée ≡), SortableJS (MIT) inclus, sans CDN
+│
 ├── tools/                    # Assemble - Outils métier
 │   ├── aelf_service.py       # Client API AELF
+│   ├── blocs.py              # Blocs de la messe : identifiants, ordre, suppression, libellés de la liste
 │   ├── chant_structure.py    # Structure d'un chant (refrain, ordre chanté)
 │   ├── pptx_generator.py     # Génération PowerPoint (python-pptx)
 │   ├── slicing.py            # Découpage du texte en slides

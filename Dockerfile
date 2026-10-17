@@ -9,6 +9,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code (config, tools, context, app)
 COPY args/ args/
+COPY components/ components/
 COPY context/ context/
 COPY hardprompts/ hardprompts/
 COPY orchestration/ orchestration/
