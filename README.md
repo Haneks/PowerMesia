@@ -7,7 +7,7 @@ Application web (Streamlit) pour générer des présentations PowerPoint de mess
 - **Récupération des lectures** : connexion à l’API AELF pour une date donnée (1ère lecture, psaume, 2e lecture, évangile).
 - **Bibliothèque de chants** : base SQLite pour gérer titres, paroles, références, recueil, moments liturgiques et structure (refrain, couplets, pont). La structure est renseignée par la page **📥 Importer des chants** ; le refrain est alors écrit en gras dans le PowerPoint et, lorsque le chant n’a qu’un seul refrain, répété après chaque couplet.
 - **Import de chants (Word / PDF)** : déposez une feuille de messe ou un chant (`.docx`, ou `.pdf` exporté depuis Word, 10 Mo au plus). Les chants sont reconnus et séparés, les refrains détectés (en gras ou en italique, ou répétés), puis vérifiés à l'écran : titre, moments, recueil, type et texte des sections, ordre chanté, doublons de la bibliothèque (ignorer, remplacer ou ajouter). Les paroles ne sont jamais corrigées. Les partitions et les PDF-images sont refusés avec une raison.
-- **Ordre personnalisable** : réorganisation des blocs (monter/descendre) avant génération.
+- **Ordre personnalisable** : réorganisation des blocs par glisser-déposer avant génération (maintenir les trois traits ≡ d’un bloc et le faire glisser, souris ou doigt) ; la corbeille de chaque ligne supprime le bloc.
 - **Export PPTX** : PowerPoint 16:9, texte Calibri 54 noir sur fond clair, 150 caractères maximum par slide, titre paginé `[Titre] - x/y` (voir `hardprompts/slicing_rules.md`).
 
 ## Prérequis
@@ -74,6 +74,7 @@ Pour utiliser des volumes nommés au lieu de dossiers locaux, adapter la section
 ├── app.py              # Interface Streamlit
 ├── args/
 │   └── config.yaml     # Configuration (design, API AELF, découpage)
+├── components/         # Liste de blocs glissable (SortableJS inclus : rien n'est chargé depuis internet)
 ├── context/            # Modèles et schéma DB
 ├── tools/              # API AELF, générateur PPTX, base chants, import Word/PDF (tools/import_chants/)
 ├── requirements.txt

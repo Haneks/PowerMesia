@@ -1,0 +1,95 @@
+/* Composant non isolé (pas de shadow DOM) : tout est préfixé « sb- » pour ne rien toucher ailleurs. */
+.sb-liste {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0.25rem 0 0.75rem;
+}
+
+.sb-ligne {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.75rem 0.5rem 0.4rem;
+  border: 1px solid var(--st-border-color, rgba(128, 128, 128, 0.35));
+  border-radius: 0.5rem;
+  background: var(--st-secondary-background-color, rgba(128, 128, 128, 0.1));
+  color: var(--st-text-color, inherit);
+  font-family: var(--st-font, inherit);
+}
+
+.sb-poignee {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* 44 px : taille minimale recommandée pour une cible tactile */
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 0.4rem;
+  color: var(--st-text-color, inherit);
+  opacity: 0.6;
+  cursor: grab;
+  /* Sans cela, sur écran tactile, le navigateur fait défiler la page au lieu de glisser le bloc. */
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.sb-poignee:hover {
+  opacity: 1;
+  background: rgba(128, 128, 128, 0.2);
+}
+
+.sb-numero {
+  flex: none;
+  min-width: 1.6rem;
+  font-weight: 600;
+  opacity: 0.7;
+}
+
+.sb-texte {
+  flex: 1;
+  min-width: 0;
+}
+.sb-titre {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sb-apercu {
+  font-size: 0.85rem;
+  opacity: 0.65;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sb-supprimer {
+  flex: none;
+  border: 1px solid transparent;
+  border-radius: 0.4rem;
+  background: transparent;
+  padding: 0.3rem 0.5rem;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.sb-supprimer:hover {
+  background: rgba(128, 128, 128, 0.2);
+}
+
+/* Emplacement laissé vide pendant le glissement */
+.sb-fantome {
+  opacity: 0.35;
+  border-style: dashed;
+}
+/* Clone qui suit le doigt ou la souris */
+.sb-glisse {
+  opacity: 0.95;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
+  cursor: grabbing;
+}
+.sb-choisi .sb-poignee {
+  cursor: grabbing;
+}
